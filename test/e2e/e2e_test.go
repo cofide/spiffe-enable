@@ -24,7 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/cofide/injector-webhook/test/utils"
+	"github.com/cofide/spiffe-enable/test/utils"
 )
 
 const namespace = "cofide-webhook-system"
