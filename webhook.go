@@ -13,7 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-const injectAnnotation = "cofide.io/sidecar-inject"
+const enableAnnotation = "cofide.io/enable"
+const modeAnnotation = "cofide.io/mode"
 const awsRoleArnAnnotation = "cofide.io/aws-role-arn"
 
 type podAnnotator struct {
@@ -22,13 +23,43 @@ type podAnnotator struct {
 	Log     logr.Logger
 }
 
+// Helper function to check if a volume already exists
+func volumeExists(pod *corev1.Pod, volumeName string) bool {
+	for _, vol := range pod.Spec.Volumes {
+		if vol.Name == volumeName {
+			return true
+		}
+	}
+	return false
+}
+
+// Helper function to check if a container already exists
+func containerExists(pod *corev1.Pod, containerName string) bool {
+	for _, container := range pod.Spec.Containers {
+		if container.Name == containerName {
+			return true
+		}
+	}
+	return false
+}
+
+// Helper function to check if an environment variable exists in a container
+func envVarExists(container *corev1.Container, envVarName string) bool {
+	for _, env := range container.Env {
+		if env.Name == envVarName {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *podAnnotator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	pod := &corev1.Pod{}
 	if err := a.decoder.Decode(req, pod); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	injectAnnotationValue, injectAnnotationExists := pod.Annotations[injectAnnotation]
+	injectAnnotationValue, injectAnnotationExists := pod.Annotations[enableAnnotation]
 	roleArValue, roleArnExists := pod.Annotations[awsRoleArnAnnotation]
 
 	if injectAnnotationExists && injectAnnotationValue == "true" &&
