@@ -8,6 +8,7 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/utils/pointer"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -99,7 +100,7 @@ func main() {
 
 	mgr.GetWebhookServer().Register("/inject", &admission.Webhook{
 		Handler:      podAnnotatorHandler,
-		RecoverPanic: true,
+		RecoverPanic: pointer.Bool(true),
 	})
 
 	// +kubebuilder:scaffold:builder
