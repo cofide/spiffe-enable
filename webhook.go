@@ -94,7 +94,7 @@ func initContainerExists(pod *corev1.Pod, containerName string) bool {
 	return containerExists(pod.Spec.InitContainers, containerName)
 }
 
-func NewPodAnnotator(client client.Client, decoder admission.Decoder, log logr.Logger) (*podAnnotator, error) {
+func NewPodAnnotator(client client.Client, log logr.Logger) (*podAnnotator, error) {
 	tmpl, err := template.New("spiffeHelperConfig").Parse(spiffeHelperConfigTemplate)
 	if err != nil {
 		log.Error(err, "Failed to parse spiffe-helper config template")
@@ -102,7 +102,6 @@ func NewPodAnnotator(client client.Client, decoder admission.Decoder, log logr.L
 	}
 	return &podAnnotator{
 		Client:                 client,
-		decoder:                decoder,
 		Log:                    log,
 		spiffeHelperConfigTmpl: tmpl,
 	}, nil
