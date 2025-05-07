@@ -19,14 +19,21 @@ import (
 
 const enableAnnotation = "cofide.io/enable"
 const modeAnnotation = "cofide.io/mode"
-const modeAnnotationDefault = "helper"
+const modeAnnotationDefault = modeAnnotationHelper
+const modeAnnotationHelper = "helper"
 const modeAnnotationProxy = "proxy"
 
 //const awsRoleArnAnnotation = "cofide.io/aws-role-arn"
 
 const agentXDSPort = 18001
+const envoyProxyPort = 10000
 
 const spiffeWLVolume = "spiffe-workload-api"
+const spiffeWLMountPath = ""
+const spiffeWLSocketEnvName = "SPIFFE_ENDPOINT_SOCKET"
+const spiffeWLSocket = "unix:///spiffe-workload-api/spire-agent.sock"
+const spiffeWLSocketPath = "/spiffe-workload-api/spire-agent.sock"
+
 const spiffeHelperConfigVolumeName = "spiffe-helper-config"
 const spiffeHelperSidecarContainerName = "spiffe-helper"
 const spiffeHelperConfigContentEnvVar = "SPIFFE_HELPER_CONFIG"
@@ -121,6 +128,20 @@ func volumeExists(pod *corev1.Pod, volumeName string) bool {
 	return false
 }
 
+// Helper function to check if a volume mount already exists
+func volumeMountExists(pod *corev1.Pod, volumeMountName string) bool {
+	// Check standard containers
+	for _, container := range pod.Spec.Containers {
+		for _, vm := range container.VolumeMounts {
+			if vm.Name == volumeMountName {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // Helper function to check if a container already exists
 func containerExists(containers []corev1.Container, containerName string) bool {
 	for _, container := range containers {
@@ -176,6 +197,7 @@ func (a *podAnnotator) Handle(ctx context.Context, req admission.Request) admiss
 		return admission.Allowed("Injection criteria not met")
 	}
 
+	// Add a CSI volume to the pod for the SPIFFE Workload API
 	if !volumeExists(pod, spiffeWLVolume) {
 		logger.Info("Adding SPIFFE CSI volume", "volumeName", spiffeWLVolume)
 		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
@@ -184,126 +206,161 @@ func (a *podAnnotator) Handle(ctx context.Context, req admission.Request) admiss
 		})
 	}
 
-	if !volumeExists(pod, spiffeHelperConfigVolumeName) {
-		logger.Info("Adding SPIFFE helper config volume", "volumeName", spiffeHelperConfigVolumeName)
-		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-			Name:         spiffeHelperConfigVolumeName,
-			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-		})
+	var spiffeVolumeMount = corev1.VolumeMount{
+		Name:      spiffeWLVolume,
+		MountPath: spiffeWLMountPath,
+		ReadOnly:  true,
 	}
 
-	templateData := spiffeHelperTemplateData{
-		AgentAddresss: "/spiffe-workload-api/spire-agent.sock",
+	var spiffeSocketEnvVar = corev1.EnvVar{
+		Name:  spiffeWLSocketEnvName,
+		Value: spiffeWLSocket,
 	}
 
-	var configBuf bytes.Buffer
-	if err := a.spiffeHelperConfigTmpl.Execute(&configBuf, templateData); err != nil {
-		logger.Error(err, "Failed to execute spiffe-helper config template")
-		return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to template helper config: %w", err))
+	// Process each (standard) container in the pod
+	for i := range pod.Spec.Containers {
+		container := &pod.Spec.Containers[i]
+		// Add CSI volume mounts
+		ensureCSIVolumeMount(container, spiffeVolumeMount, logger)
+		// Add SPIFFE socket environment variable
+		ensureEnvVar(container, spiffeSocketEnvVar, logger)
 	}
-	spiffeHelperConfig := configBuf.String()
 
-	if !initContainerExists(pod, spiffeHelperInitContainerName) {
-		logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", spiffeHelperInitContainerName)
-		configFilePath := filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)
-		writeCmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s", filepath.Dir(configFilePath), spiffeHelperConfigContentEnvVar, configFilePath)
+	// Check for a mode annotation and process based on the value
+	modeAnnotationValue, modeAnnotationExists := pod.Annotations[modeAnnotation]
 
-		initContainer := corev1.Container{
-			Name:            spiffeHelperInitContainerName,
-			Image:           initHelperImage,
-			ImagePullPolicy: corev1.PullIfNotPresent,
-			Command:         []string{"/bin/sh", "-c"},
-			Args:            []string{writeCmd},
-			Env:             []corev1.EnvVar{{Name: spiffeHelperConfigContentEnvVar, Value: spiffeHelperConfig}},
-			VolumeMounts:    []corev1.VolumeMount{{Name: spiffeHelperConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
+	if modeAnnotationExists {
+		if modeAnnotationValue != modeAnnotationHelper && modeAnnotationValue != modeAnnotationProxy {
+			err := fmt.Errorf(
+				"invalid value %q for annotation %q; allowed values are %q or %q",
+				modeAnnotationValue,
+				modeAnnotation,
+				modeAnnotationHelper,
+				modeAnnotationProxy,
+			)
+			logger.Error(err, "Pod rejected due to invalid annotation value", "annotationKey", modeAnnotation, "providedValue", modeAnnotationValue)
+			return admission.Denied(err.Error())
 		}
-		pod.Spec.InitContainers = append([]corev1.Container{initContainer}, pod.Spec.InitContainers...)
-	}
 
-	/*
-		if !containerExists(pod.Spec.Containers, helperSidecarContainerName) {
-			logger.Info("Adding SPIFFE Helper sidecar container", "containerName", helperSidecarContainerName)
-			helperSidecar := corev1.Container{
-				Name:            helperSidecarContainerName,
-				Image:           helperSidecarImage,
-				ImagePullPolicy: corev1.PullIfNotPresent,
-				Args:            []string{"-config", filepath.Join(helperConfigMountPath, helperConfigFileName)},
-				VolumeMounts: []corev1.VolumeMount{
-					{Name: helperConfigVolumeName, MountPath: helperConfigMountPath, ReadOnly: true},
-					{Name: spiffeVolumeName, MountPath: "/spiffe-workload-api", ReadOnly: true},
-				},
+		switch modeAnnotationValue {
+		case modeAnnotationHelper:
+			logger.Info("Applying 'helper' mode mutations")
+
+			// Add an emptyDir volume for the SPIFFE Helper configiuration if it doesn't already exist
+			if !volumeExists(pod, spiffeHelperConfigVolumeName) {
+				logger.Info("Adding SPIFFE helper config volume", "volumeName", spiffeHelperConfigVolumeName)
+				pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+					Name:         spiffeHelperConfigVolumeName,
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+				})
 			}
-			pod.Spec.Containers = append(pod.Spec.Containers, helperSidecar)
-		}
 
-			if injectAnnotationExists && injectAnnotationValue == "true" &&
-				roleArnExists && roleArValue != "" {
+			templateData := spiffeHelperTemplateData{
+				AgentAddresss: spiffeWLSocketPath,
+			}
 
-				// add the AWS SDK env var
-				credsURIEnvVar := corev1.EnvVar{
-					Name:  "AWS_CONTAINER_CREDENTIALS_FULL_URI",
-					Value: "http://127.0.0.1:8080/v1/credentials",
+			var configBuf bytes.Buffer
+			if err := a.spiffeHelperConfigTmpl.Execute(&configBuf, templateData); err != nil {
+				logger.Error(err, "Failed to execute spiffe-helper config template")
+				return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to template helper config: %w", err))
+			}
+			spiffeHelperConfig := configBuf.String()
+
+			if !initContainerExists(pod, spiffeHelperInitContainerName) {
+				logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", spiffeHelperInitContainerName)
+				configFilePath := filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)
+				writeCmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s", filepath.Dir(configFilePath), spiffeHelperConfigContentEnvVar, configFilePath)
+
+				initContainer := corev1.Container{
+					Name:            spiffeHelperInitContainerName,
+					Image:           initHelperImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Command:         []string{"/bin/sh", "-c"},
+					Args:            []string{writeCmd},
+					Env:             []corev1.EnvVar{{Name: spiffeHelperConfigContentEnvVar, Value: spiffeHelperConfig}},
+					VolumeMounts:    []corev1.VolumeMount{{Name: spiffeHelperConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
 				}
-				// add to the first container (naive for now..)
-				pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, credsURIEnvVar)
+				pod.Spec.InitContainers = append([]corev1.Container{initContainer}, pod.Spec.InitContainers...)
+			}
 
-				// Create the new container
-				sidecarContainer := corev1.Container{
-					Name:            "cofide-spiffe-iam-sidecar",
-					Image:           "kind.local/aws-spiffe-iam-sidecar-effa1e319e451573b9fc06478801e519:latest",
-					ImagePullPolicy: "IfNotPresent",
-					Ports: []corev1.ContainerPort{
-						{
-							Name:          "http",
-							ContainerPort: 8080,
-							Protocol:      corev1.ProtocolTCP,
-						},
-					},
-					Env: []corev1.EnvVar{
-						{
-							Name:  "AWS_ROLE_ARN",
-							Value: roleArValue,
-						},
-						{
-							Name:  "AWS_SESSION_NAME",
-							Value: "consumer-workload-session",
-						},
-					},
+			if !containerExists(pod.Spec.Containers, spiffeHelperSidecarContainerName) {
+				logger.Info("Adding SPIFFE Helper sidecar container", "containerName", spiffeHelperSidecarContainerName)
+				helperSidecar := corev1.Container{
+					Name:            spiffeHelperSidecarContainerName,
+					Image:           spiffeHelperImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Args:            []string{"-config", filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)},
 					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "spiffe-workload-api",
-							MountPath: "/spiffe-workload-api",
-							ReadOnly:  true,
-						},
-						{
-							Name:      "temp-token-volume",
-							MountPath: "/token",
-						},
+						{Name: spiffeHelperConfigVolumeName, MountPath: spiffeHelperConfigMountPath, ReadOnly: true},
+						spiffeVolumeMount,
 					},
 				}
-				// add the temp in-memory volume
-				pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-					Name: "temp-token-volume",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{
-							Medium: corev1.StorageMediumMemory,
-						},
-					},
-				})
-				// add the spiffe workload socket
-				pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-					Name: "spiffe-workload-api",
-					VolumeSource: corev1.VolumeSource{
-						CSI: &corev1.CSIVolumeSource{
-							Driver:   "csi.spiffe.io",
-							ReadOnly: pointer.Bool(true),
-						},
-					},
-				})
-				// Add the new container to the pod
-				pod.Spec.Containers = append(pod.Spec.Containers, sidecarContainer)
+				pod.Spec.Containers = append(pod.Spec.Containers, helperSidecar)
 			}
-	*/
+
+			/*
+
+				if injectAnnotationExists && injectAnnotationValue == "true" &&
+					roleArnExists && roleArValue != "" {s
+
+					/ze/ add the AWS SDK env var
+					credsURIEnvVar := corev1.EnvVar{
+						Name:  "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+						Value: "http://127.0.0.1:8080/v1/credentials",
+					}
+					// add to the first container (naive for now..)
+					pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, credsURIEnvVar)
+
+					// Create the new container
+					sidecarContainer := corev1.Container{
+						Name:            "cofide-spiffe-iam-sidecar",
+						Image:           "kind.local/aws-spiffe-iam-sidecar-effa1e319e451573b9fc06478801e519:latest",
+						ImagePullPolicy: "IfNotPresent",
+						Ports: []corev1.ContainerPort{
+							{
+								Name:          "http",
+								ContainerPort: 8080,
+								Protocol:      corev1.ProtocolTCP,
+							},
+						},
+						Env: []corev1.EnvVar{
+							{
+								Name:  "AWS_ROLE_ARN",
+								Value: roleArValue,
+							},
+							{
+								Name:  "AWS_SESSION_NAME",
+								Value: "consumer-workload-session",
+							},
+						},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "spiffe-workload-api",
+								MountPath: "/spiffe-workload-api",
+								ReadOnly:  true,
+							},
+							{
+								Name:      "temp-token-volume",
+								MountPath: "/token",
+							},
+						},
+					}
+					// add the temp in-memory volume
+					pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+						Name: "temp-token-volume",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{
+								Medium: corev1.StorageMediumMemory,
+							},
+						},
+					})
+
+					// Add the new container to the pod
+					pod.Spec.Containers = append(pod.Spec.Containers, sidecarContainer)
+				}
+			*/
+		}
+	}
 
 	marshaledPod, err := json.Marshal(pod)
 	if err != nil {
@@ -317,4 +374,42 @@ func (a *podAnnotator) Handle(ctx context.Context, req admission.Request) admiss
 func (a *podAnnotator) InjectDecoder(d admission.Decoder) error {
 	a.decoder = d
 	return nil
+}
+
+func ensureCSIVolumeMount(container *corev1.Container, targetMount corev1.VolumeMount, logger logr.Logger) bool {
+	madeChange := false
+	mountExists := false
+	mountIndex := -1 // Index of the mount if found by name and path
+
+	for i, vm := range container.VolumeMounts {
+		if vm.Name == targetMount.Name && vm.MountPath == targetMount.MountPath {
+			mountIndex = i
+			if vm.ReadOnly == targetMount.ReadOnly {
+				mountExists = true // Exact match found
+			}
+			break // Found the mount by name and path, no need to search further
+		}
+	}
+
+	if !mountExists {
+		if mountIndex != -1 {
+			// Mount exists with the same name and path, but ReadOnly differs. Update it.
+			logger.Info("Updating ReadOnly status for existing VolumeMount",
+				"containerName", container.Name, "volumeMountName", targetMount.Name, "newReadOnly", targetMount.ReadOnly)
+			container.VolumeMounts[mountIndex].ReadOnly = targetMount.ReadOnly
+			madeChange = true
+		} else {
+			// Mount does not exist at all, append it.
+			logger.Info("Adding new VolumeMount to container",
+				"containerName", container.Name, "volumeMountName", targetMount.Name)
+			container.VolumeMounts = append(container.VolumeMounts, targetMount)
+			madeChange = true
+		}
+	}
+	return madeChange
+}
+
+func ensureEnvVar(container *corev1.Container, envVar corev1.EnvVar, logger logr.Logger) bool {
+	container.Env = append(container.Env, envVar)
+	return true
 }
