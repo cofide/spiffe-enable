@@ -1,25 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sidecar-injector-webhook
+  name: spiffe-enable-webhook
   namespace: cofide
 spec:
   selector:
     matchLabels:
-      app: sidecar-injector-webhook
+      app: spiffe-enable-webhook
   replicas: 1
   template:
     metadata:
       labels:
-        app: sidecar-injector-webhook
+        app: spiffe-enable-webhook
     spec:
       containers:
-      - name: sidecar-injector-webhook
-        image: ko://github.com/cofide/injector-webhook
+      - name: spiffe-enable-webhook
+        image: ko://github.com/cofide/spiffe-enable
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - name: tls
-          # the tls certificates automatically get mounted into the correct path
           mountPath: "/tmp/k8s-webhook-server/serving-certs"
           readOnly: true
         livenessProbe:
@@ -38,8 +37,5 @@ spec:
       volumes:
         - name: tls
           secret:
-            # IMPORTANT: has to match from Certificate
-            secretName: sidecar-injector-webhook-tls
-            # the pod only gets created if the secret exists
-            # so it waits until the cert-manager is done
+            secretName: spiffe-enable-webhook-tls
             optional: false

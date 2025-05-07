@@ -11,12 +11,12 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: sidecar-injector-webhook
+  name: spiffe-enable-webhook
   namespace: cofide
 spec:
   # remember the secretName
-  secretName: sidecar-injector-webhook-tls
+  secretName: spiffe-enable-webhook-tls
   dnsNames:
-    - sidecar-injector-webhook.cofide.svc
+    - spiffe-enable-webhook.cofide.svc
   issuerRef:
     name: selfsigned

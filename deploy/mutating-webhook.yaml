@@ -1,10 +1,9 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: sidecar-injector-webhook
+  name: spiffe-enable-webhook
   annotations:
-    # IMPORTANT: has to match Certificate namespace.name
-    cert-manager.io/inject-ca-from: cofide/sidecar-injector-webhook
+    cert-manager.io/inject-ca-from: cofide/spiffe-enable-webhook
 webhooks:
 - admissionReviewVersions:
   - v1
@@ -12,7 +11,7 @@ webhooks:
     service:
       # has to match the service we created
       namespace: cofide
-      name: sidecar-injector-webhook
+      name: spiffe-enable-webhook
       port: 9443
       path: "/inject"
   failurePolicy: Fail
