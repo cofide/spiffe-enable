@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-const enableAnnotation = "spiffe.cofide.io/enable"
+const enabledAnnotation = "spiffe.cofide.io/enabled"
 const modeAnnotation = "spiffe.cofide.io/mode"
 const modeAnnotationDefault = modeAnnotationHelper
 const modeAnnotationHelper = "helper"
@@ -189,11 +189,11 @@ func (a *podAnnotator) Handle(ctx context.Context, req admission.Request) admiss
 
 	logger := a.Log.WithValues("podNamespace", pod.Namespace, "podName", pod.Name, "request", req.UID)
 
-	injectAnnotationValue, injectAnnotationExists := pod.Annotations[enableAnnotation]
+	injectAnnotationValue, injectAnnotationExists := pod.Annotations[enabledAnnotation]
 	spiffeInjectionEnabled := injectAnnotationExists && injectAnnotationValue == "true"
 
 	if !spiffeInjectionEnabled {
-		logger.Info("Skipping all injections, annotation not set or disabled", "annotation", enableAnnotation)
+		logger.Info("Skipping all injections, annotation not set or disabled", "annotation", enabledAnnotation)
 		return admission.Allowed("Injection criteria not met")
 	}
 
