@@ -29,7 +29,7 @@ const agentXDSPort = 18001
 const envoyProxyPort = 10000
 
 const spiffeWLVolume = "spiffe-workload-api"
-const spiffeWLMountPath = ""
+const spiffeWLMountPath = "/spiffe-workload-api"
 const spiffeWLSocketEnvName = "SPIFFE_ENDPOINT_SOCKET"
 const spiffeWLSocket = "unix:///spiffe-workload-api/spire-agent.sock"
 const spiffeWLSocketPath = "/spiffe-workload-api/spire-agent.sock"
