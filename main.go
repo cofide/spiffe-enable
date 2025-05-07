@@ -89,17 +89,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	podAnnotatorHandler, err := NewPodAnnotator(
+	spiffeEnableHandler, err := NewSpiffeEnable(
 		mgr.GetClient(),
-		ctrl.Log.WithName("cofide-pod-annotator"),
+		ctrl.Log.WithName("cofide-spiffe-enable"),
 	)
 	if err != nil {
-		setupLog.Error(err, "unable to create pod annotator handler")
+		setupLog.Error(err, "unable to create cofide-spiffe-enable handler")
 		os.Exit(1)
 	}
 
 	mgr.GetWebhookServer().Register("/inject", &admission.Webhook{
-		Handler:      podAnnotatorHandler,
+		Handler:      spiffeEnableHandler,
 		RecoverPanic: pointer.Bool(true),
 	})
 
