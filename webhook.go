@@ -17,13 +17,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-const enableAnnotation = "cofide.io/enable"
-const modeAnnotation = "cofide.io/mode"
+const enableAnnotation = "spiffe.cofide.io/enable"
+const modeAnnotation = "spiffe.cofide.io/mode"
 const modeAnnotationDefault = modeAnnotationHelper
 const modeAnnotationHelper = "helper"
 const modeAnnotationProxy = "proxy"
 
-//const awsRoleArnAnnotation = "cofide.io/aws-role-arn"
+//const awsRoleArnAnnotation = "spiffe.cofide.io/aws-role-arn"
 
 const agentXDSPort = 18001
 const envoyProxyPort = 10000
