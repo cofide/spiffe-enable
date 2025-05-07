@@ -409,7 +409,8 @@ func ensureCSIVolumeMount(container *corev1.Container, targetMount corev1.Volume
 	return madeChange
 }
 
-func ensureEnvVar(container *corev1.Container, envVar corev1.EnvVar, logger logr.Logger) bool {
-	container.Env = append(container.Env, envVar)
-	return true
+func ensureEnvVar(container *corev1.Container, envVar corev1.EnvVar, logger logr.Logger) {
+	if !envVarExists(container, envVar.Name) {
+		container.Env = append(container.Env, envVar)
+	}
 }
