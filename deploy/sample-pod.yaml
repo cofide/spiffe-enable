@@ -2,11 +2,9 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: awscli
-  labels:
-    "spiffe.io/spire-managed-identity": "true"
   annotations:
-    "cofide.io/sidecar-inject": "true"
-    "cofide.io/aws-role-arn": "arn:aws:iam::590183795715:role/cofide-demo-oidc-discovery-provider-role"
+    "spiffe.cofide.io/enabled": "true"
+    #"cofide.io/aws-role-arn": "arn:aws:iam::590183795715:role/cofide-demo-oidc-discovery-provider-role"
 spec:
   containers:
   - name: aws-cli

@@ -90,9 +90,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	spiffeEnableHandler, err := cofidewebhook.NewSpiffeEnable(
+	spiffeEnableHandler, err := cofidewebhook.NewSpiffeEnableWebhook(
 		mgr.GetClient(),
 		ctrl.Log.WithName("cofide-spiffe-enable"),
+		admission.NewDecoder(mgr.GetScheme()),
 	)
 	if err != nil {
 		setupLog.Error(err, "unable to create cofide-spiffe-enable handler")

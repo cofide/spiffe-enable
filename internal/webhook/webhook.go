@@ -45,7 +45,7 @@ var spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
 var initHelperImage = "cgr.dev/chainguard/busybox:latest"
 
 const spiffeHelperConfigTemplate = `
-    agent_address = {{ AgentAddress }}
+    agent_address = {{ .AgentAddress }}
     include_federated_domains = true
     cmd = ""
     cmd_args = ""
@@ -104,14 +104,14 @@ static_resources:
                   address:
                     socket_address:
                       address: 127.0.0.1
-                      port_value: {{ AgentXDSPort }}
+                      port_value: {{ .AgentXDSPort }}
 `
 
 type spiffeHelperTemplateData struct {
 	AgentAddresss string
 }
 
-type spiffeEnable struct {
+type spiffeEnableWebhook struct {
 	Client                 client.Client
 	decoder                admission.Decoder
 	Log                    logr.Logger
@@ -167,20 +167,21 @@ func initContainerExists(pod *corev1.Pod, containerName string) bool {
 	return containerExists(pod.Spec.InitContainers, containerName)
 }
 
-func NewSpiffeEnable(client client.Client, log logr.Logger) (*spiffeEnable, error) {
+func NewSpiffeEnableWebhook(client client.Client, log logr.Logger, decoder admission.Decoder) (*spiffeEnableWebhook, error) {
 	tmpl, err := template.New("spiffeHelperConfig").Parse(spiffeHelperConfigTemplate)
 	if err != nil {
 		log.Error(err, "Failed to parse spiffe-helper config template")
 		return nil, fmt.Errorf("failed to parse spiffe-helper config template: %w", err)
 	}
-	return &spiffeEnable{
+	return &spiffeEnableWebhook{
 		Client:                 client,
 		Log:                    log,
+		decoder:                decoder,
 		spiffeHelperConfigTmpl: tmpl,
 	}, nil
 }
 
-func (a *spiffeEnable) Handle(ctx context.Context, req admission.Request) admission.Response {
+func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {
 	pod := &corev1.Pod{}
 	if err := a.decoder.Decode(req, pod); err != nil {
 		a.Log.Error(err, "Failed to decode pod", "request", req.UID)
@@ -369,11 +370,6 @@ func (a *spiffeEnable) Handle(ctx context.Context, req admission.Request) admiss
 	}
 
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
-}
-
-func (a *spiffeEnable) InjectDecoder(d admission.Decoder) error {
-	a.decoder = d
-	return nil
 }
 
 func ensureCSIVolumeMount(container *corev1.Container, targetMount corev1.VolumeMount, logger logr.Logger) bool {
