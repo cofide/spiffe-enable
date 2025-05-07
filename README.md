@@ -10,9 +10,9 @@ A Kubernetes admission webhook to auto-inject components to enable SPIFFE for a 
 
 If a pod has the `cofide.io/enabled` annotation set, a `spiffe-helper` will be injected. This is the default `mode`.
 
-If `cofide.io/mode` is set to `proxy`, an Envoy container will be injected.
+If `cofide.io/mode` is set to `envoy`, an Envoy container will be injected.
 
-If the `cofide.io/aws-role-arn"`annotation is set, the admission webhook will inject an [aws-spiffe-iam-sidecar](https://github.com/cofide/aws-spiffe-iam-sidecar) container, including the relevant volumes, volume mounts and environment variables. 
+TODO: If the `cofide.io/aws-role-arn"`annotation is set, the admission webhook will inject an [aws-spiffe-iam-sidecar](https://github.com/cofide/aws-spiffe-iam-sidecar) container, including the relevant volumes, volume mounts and environment variables. 
 
 ## Getting Started
 
