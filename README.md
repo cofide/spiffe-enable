@@ -1,6 +1,6 @@
 # spiffe-enable
 
-A Kubernetes admission webhook to auto-inject components to enable SPIFFE for a non-SPIFFE native workload, including:
+A Kubernetes admission webhook to auto-inject components to enable SPIFFE for workloads (including non-SPIFFE native workloads):
 
 - [spiffe-helper](https://github.com/spiffe/spiffe-helper)
 - [Envoy](https://github.com/envoyproxy/envoy)
