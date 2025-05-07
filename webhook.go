@@ -12,14 +12,19 @@ import (
 	"github.com/go-logr/logr"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 const enableAnnotation = "cofide.io/enable"
 const modeAnnotation = "cofide.io/mode"
-const awsRoleArnAnnotation = "cofide.io/aws-role-arn"
+const modeAnnotationDefault = "helper"
+const modeAnnotationProxy = "proxy"
+
+//const awsRoleArnAnnotation = "cofide.io/aws-role-arn"
+
+const agentXDSPort = 18001
 
 const spiffeWLVolume = "spiffe-workload-api"
 const spiffeHelperConfigVolumeName = "spiffe-helper-config"
@@ -35,7 +40,6 @@ var initHelperImage = "cgr.dev/chainguard/busybox:latest"
 const spiffeHelperConfigTemplate = `
     agent_address = {{ AgentAddress }}
     include_federated_domains = true
-    add_intermediates_to_bundle = true
     cmd = ""
     cmd_args = ""
     cert_dir = "/tmp"
@@ -46,6 +50,54 @@ const spiffeHelperConfigTemplate = `
     jwt_bundle_file_name = "cert.jwt"
     jwt_svids = [{jwt_audience="test", jwt_svid_file_name="jwt_svid.token"}]
     daemon_mode = true
+`
+
+const envoyConfigTemplate = `
+node:
+  id: node
+  cluster: cluster
+
+# Dynamic resource configuration
+dynamic_resources:
+  # Configure ADS (Aggregated Discovery Service)
+  ads_config:
+    api_type: GRPC
+    transport_api_version: V3 # Use the v3 xDS API
+    grpc_services:
+      - envoy_grpc:
+          cluster_name: xds_cluster
+    set_node_on_first_message_only: true # Optimization for ADS
+
+  # Configure CDS (Cluster Discovery Service) to use ADS
+  cds_config:
+    resource_api_version: V3
+    ads: {} 
+
+  lds_config:
+    resource_api_version: V3
+    ads: {} 
+
+static_resources:
+  clusters:
+    - name: xds_cluster 
+      type: LOGICAL_DNS 
+      connect_timeout: 5s
+      # xDS uses gRPC, which requires HTTP/2
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {} # Enable HTTP/2
+
+      load_assignment:
+        cluster_name: xds_cluster
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: 127.0.0.1
+                      port_value: {{ AgentXDSPort }}
 `
 
 type spiffeHelperTemplateData struct {
@@ -128,7 +180,7 @@ func (a *podAnnotator) Handle(ctx context.Context, req admission.Request) admiss
 		logger.Info("Adding SPIFFE CSI volume", "volumeName", spiffeWLVolume)
 		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
 			Name:         spiffeWLVolume,
-			VolumeSource: corev1.VolumeSource{CSI: &corev1.CSIVolumeSource{Driver: "csi.spiffe.io", ReadOnly: pointer.Bool(true)}},
+			VolumeSource: corev1.VolumeSource{CSI: &corev1.CSIVolumeSource{Driver: "csi.spiffe.io", ReadOnly: ptr.To(true)}},
 		})
 	}
 
