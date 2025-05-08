@@ -19,20 +19,26 @@ import (
 
 const enabledAnnotation = "spiffe.cofide.io/enabled"
 const modeAnnotation = "spiffe.cofide.io/mode"
-const modeAnnotationDefault = modeAnnotationHelper
 const modeAnnotationHelper = "helper"
 const modeAnnotationProxy = "proxy"
 
 //const awsRoleArnAnnotation = "spiffe.cofide.io/aws-role-arn"
-
-const agentXDSPort = 18001
-const envoyProxyPort = 10000
 
 const spiffeWLVolume = "spiffe-workload-api"
 const spiffeWLMountPath = "/spiffe-workload-api"
 const spiffeWLSocketEnvName = "SPIFFE_ENDPOINT_SOCKET"
 const spiffeWLSocket = "unix:///spiffe-workload-api/spire-agent.sock"
 const spiffeWLSocketPath = "/spiffe-workload-api/spire-agent.sock"
+
+const agentXDSPort = 18001
+const envoyProxyPort = 10000
+const envoySidecarContainerName = "envoy-sidecar"
+const envoyConfigVolumeName = "envoy-config"
+const envoyConfigMountPath = "/etc/envoy"
+const envoyConfigFileName = "envoy.yaml"
+const envoyConfigContentEnvVar = "ENVOY_CONFIG_CONTENT"
+
+const envoyConfigInitContainerName = "inject-envoy-config"
 
 const spiffeHelperConfigVolumeName = "spiffe-helper-config"
 const spiffeHelperSidecarContainerName = "spiffe-helper"
@@ -41,10 +47,11 @@ const spiffeHelperConfigMountPath = "/etc/spiffe-helper"
 const spiffeHelperConfigFileName = "config.conf"
 const spiffeHelperInitContainerName = "inject-spiffe-helper-config"
 
+var envoyImage = "envoyproxy/envoy:v1.33-latest"
 var spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
 var initHelperImage = "cgr.dev/chainguard/busybox:latest"
 
-const spiffeHelperConfigTemplate = `
+var spiffeHelperConfigTemplate = `
     agent_address = {{ .AgentAddress }}
     include_federated_domains = true
     cmd = ""
@@ -59,7 +66,11 @@ const spiffeHelperConfigTemplate = `
     daemon_mode = true
 `
 
-const envoyConfigTemplate = `
+type spiffeHelperTemplateData struct {
+	AgentAddresss string
+}
+
+var envoyConfigTemplate = `
 node:
   id: node
   cluster: cluster
@@ -107,8 +118,8 @@ static_resources:
                       port_value: {{ .AgentXDSPort }}
 `
 
-type spiffeHelperTemplateData struct {
-	AgentAddresss string
+type envoyTemplateData struct {
+	AgentXDSPort int
 }
 
 type spiffeEnableWebhook struct {
@@ -116,6 +127,7 @@ type spiffeEnableWebhook struct {
 	decoder                admission.Decoder
 	Log                    logr.Logger
 	spiffeHelperConfigTmpl *template.Template
+	envoyConfigTmpl        *template.Template
 }
 
 // Helper function to check if a volume already exists
@@ -168,16 +180,24 @@ func initContainerExists(pod *corev1.Pod, containerName string) bool {
 }
 
 func NewSpiffeEnableWebhook(client client.Client, log logr.Logger, decoder admission.Decoder) (*spiffeEnableWebhook, error) {
-	tmpl, err := template.New("spiffeHelperConfig").Parse(spiffeHelperConfigTemplate)
+	spiffeHelperTmpl, err := template.New("spiffeHelperConfig").Parse(spiffeHelperConfigTemplate)
 	if err != nil {
 		log.Error(err, "Failed to parse spiffe-helper config template")
 		return nil, fmt.Errorf("failed to parse spiffe-helper config template: %w", err)
 	}
+
+	envoyTmpl, err := template.New("envoyConfig").Parse(envoyConfigTemplate)
+	if err != nil {
+		log.Error(err, "Failed to parse Envoy config template")
+		return nil, fmt.Errorf("failed to parse Envoy config template: %w", err)
+	}
+
 	return &spiffeEnableWebhook{
 		Client:                 client,
 		Log:                    log,
 		decoder:                decoder,
-		spiffeHelperConfigTmpl: tmpl,
+		spiffeHelperConfigTmpl: spiffeHelperTmpl,
+		envoyConfigTmpl:        envoyTmpl,
 	}, nil
 }
 
@@ -244,6 +264,53 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		}
 
 		switch modeAnnotationValue {
+		// Inject an Envoy proxy sidecar container
+		case modeAnnotationProxy:
+			templateData := envoyTemplateData{
+				AgentXDSPort: agentXDSPort,
+			}
+
+			var configBuf bytes.Buffer
+			if err := a.envoyConfigTmpl.Execute(&configBuf, templateData); err != nil {
+				logger.Error(err, "Failed to execute Envoy config template")
+				return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to template Envoy config: %w", err))
+			}
+			envoyConfig := configBuf.String()
+
+			if !initContainerExists(pod, envoyConfigInitContainerName) {
+				logger.Info("Adding init container to inject Envoy config", "initContainerName", envoyConfigInitContainerName)
+				configFilePath := filepath.Join(envoyConfigMountPath, envoyConfigFileName)
+				writeCmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s", filepath.Dir(configFilePath), envoyConfigContentEnvVar, configFilePath)
+
+				initContainer := corev1.Container{
+					Name:            envoyConfigInitContainerName,
+					Image:           initHelperImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Command:         []string{"/bin/sh", "-c"},
+					Args:            []string{writeCmd},
+					Env:             []corev1.EnvVar{{Name: envoyConfigContentEnvVar, Value: envoyConfig}},
+					VolumeMounts:    []corev1.VolumeMount{{Name: envoyConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
+				}
+				pod.Spec.InitContainers = append([]corev1.Container{initContainer}, pod.Spec.InitContainers...)
+			}
+
+			if !containerExists(pod.Spec.Containers, envoySidecarContainerName) {
+				logger.Info("Adding Envoy proxy sidecar container", "containerName", envoySidecarContainerName)
+				envoySidecar := corev1.Container{
+					Name:            envoySidecarContainerName,
+					Image:           envoyImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Command:         []string{"envoy"},
+					Args:            []string{"-c", "/etc/envoy/envoy.yaml"},
+					VolumeMounts:    []corev1.VolumeMount{{Name: envoyConfigVolumeName, MountPath: envoyConfigMountPath}},
+					Ports: []corev1.ContainerPort{
+						{ContainerPort: envoyProxyPort},
+					},
+				}
+				pod.Spec.Containers = append(pod.Spec.Containers, envoySidecar)
+			}
+
+		// Inject a spiffe-helper sidecar container
 		case modeAnnotationHelper:
 			logger.Info("Applying 'helper' mode mutations")
 
