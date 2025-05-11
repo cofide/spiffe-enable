@@ -295,6 +295,15 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		switch modeAnnotationValue {
 		// Inject an Envoy proxy sidecar container
 		case modeAnnotationProxy:
+			// Add an emptyDir volume for the Envoyt proxy configiuration if it doesn't already exist
+			if !volumeExists(pod, envoyConfigVolumeName) {
+				logger.Info("Adding Envoy config volume", "volumeName", envoyConfigVolumeName)
+				pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+					Name:         envoyConfigVolumeName,
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+				})
+			}
+
 			templateData := envoyTemplateData{
 				AgentXDSPort: agentXDSPort,
 			}
