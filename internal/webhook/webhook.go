@@ -50,7 +50,7 @@ var spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
 var initHelperImage = "spiffe-enable-init:latest"
 
 var spiffeHelperConfigTemplate = `
-agent_address = {{ .AgentAddress }}
+agent_address = "{{ .AgentAddress }}"
 include_federated_domains = true
 cmd = ""
 cmd_args = ""
