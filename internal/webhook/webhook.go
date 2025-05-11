@@ -381,7 +381,11 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 			if !initContainerExists(pod, spiffeHelperInitContainerName) {
 				logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", spiffeHelperInitContainerName)
 				configFilePath := filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)
-				writeCmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s", filepath.Dir(configFilePath), spiffeHelperConfigContentEnvVar, configFilePath)
+				writeCmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s && echo -e \"\\n=== SPIFFE Helper Config ===\" && cat %s && echo -e \"\\n===========================\"",
+					filepath.Dir(configFilePath),
+					spiffeHelperConfigContentEnvVar,
+					configFilePath,
+					configFilePath)
 
 				initContainer := corev1.Container{
 					Name:            spiffeHelperInitContainerName,
