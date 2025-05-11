@@ -274,6 +274,8 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		ensureEnvVar(container, spiffeSocketEnvVar, logger)
 	}
 
+	logger.Info("Observed pod annotations", "annotations", pod.Annotations)
+
 	// Check for a mode annotation and process based on the value
 	modeAnnotationValue, modeAnnotationExists := pod.Annotations[modeAnnotation]
 
