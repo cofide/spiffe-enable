@@ -29,7 +29,9 @@ const spiffeWLSocket = "unix:///spiffe-workload-api/spire-agent.sock"
 const spiffeWLSocketPath = "/spiffe-workload-api/spire-agent.sock"
 
 const agentXDSPort = 18001
+const agentXDSService = "cofide-agent.cofide.svc.cluster.local"
 const envoyProxyPort = 10000
+
 const envoySidecarContainerName = "envoy-sidecar"
 const envoyConfigVolumeName = "envoy-config"
 const envoyConfigMountPath = "/etc/envoy"
@@ -112,7 +114,7 @@ static_resources:
               - endpoint:
                   address:
                     socket_address:
-                      address: 127.0.0.1
+                      address: {{ .AgentXDSService }}
                       port_value: {{ .AgentXDSPort }}
 `
 
@@ -141,7 +143,8 @@ nft list table inet envoy_dns_interception
 `
 
 type envoyTemplateData struct {
-	AgentXDSPort int
+	AgentXDSPort    int
+	AgentXDSService string
 }
 
 type spiffeEnableWebhook struct {
@@ -300,7 +303,8 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 			}
 
 			templateData := envoyTemplateData{
-				AgentXDSPort: agentXDSPort,
+				AgentXDSPort:    agentXDSPort,
+				AgentXDSService: agentXDSService,
 			}
 
 			var configBuf bytes.Buffer
