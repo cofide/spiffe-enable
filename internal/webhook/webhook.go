@@ -116,6 +116,35 @@ static_resources:
                       port_value: {{ .AgentXDSPort }}
 `
 
+var nftablesSetupScript = `
+cat <<EOF > /tmp/dns_redirect.nft
+#!/usr/sbin/nft -f
+define ENVOY_PROXY_UID = 1337
+define ENVOY_DNS_LISTEN_PORT = 15053
+define K8S_DNS_PORT = 53
+define DNS_TABLE_NAME = envoy_dns_interception_webhook # Using a distinct table name
+
+# Delete the table if it exists to ensure a clean state for these specific rules.
+# "2>/dev/null || true" suppresses errors if the table doesn't exist.
+delete table inet \$DNS_TABLE_NAME 2>/dev/null || true
+
+# Add (create) our dedicated table.
+add table inet \$DNS_TABLE_NAME
+
+# Add the chain to our table for NAT output redirection.
+add chain inet \$DNS_TABLE_NAME redirect_dns_output {
+    type nat hook output priority -100; policy accept;
+}
+
+# Add the DNS redirection rules.
+add rule inet \$DNS_TABLE_NAME redirect_dns_output meta skuid != \$ENVOY_PROXY_UID udp dport \$K8S_DNS_PORT redirect to :\$ENVOY_DNS_LISTEN_PORT comment "Webhook: UDP DNS to Envoy"
+add rule inet \$DNS_TABLE_NAME redirect_dns_output meta skuid != \$ENVOY_PROXY_UID tcp dport \$K8S_DNS_PORT redirect to :\$ENVOY_DNS_LISTEN_PORT comment "Webhook: TCP DNS to Envoy"
+EOF
+# Apply the nftables rules from the created file
+nft -f /tmp/dns_redirect.nft
+echo "nftables DNS redirection rules applied."
+`
+
 type envoyTemplateData struct {
 	AgentXDSPort int
 }
@@ -279,7 +308,14 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 			if !initContainerExists(pod, envoyConfigInitContainerName) {
 				logger.Info("Adding init container to inject Envoy config", "initContainerName", envoyConfigInitContainerName)
 				configFilePath := filepath.Join(envoyConfigMountPath, envoyConfigFileName)
-				cmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s", filepath.Dir(configFilePath), envoyConfigContentEnvVar, configFilePath)
+
+				// This command writes out an Envoy config file based on the contents of the environment variable
+				envoyConfigCmd := fmt.Sprintf("mkdir -p %s && printf '%%s' \"${%s}\" > %s",
+					filepath.Dir(configFilePath),
+					envoyConfigContentEnvVar,
+					configFilePath)
+
+				cmd := fmt.Sprintf("set -e; %s && %s", envoyConfigCmd, nftablesSetupScript)
 
 				initContainer := corev1.Container{
 					Name:            envoyConfigInitContainerName,
