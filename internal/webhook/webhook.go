@@ -47,7 +47,7 @@ const spiffeHelperInitContainerName = "inject-spiffe-helper-config"
 
 var envoyImage = "envoyproxy/envoy:v1.33-latest"
 var spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
-var initHelperImage = "cofide/spiffe-enable-init:latest"
+var initHelperImage = "spiffe-enable-init:latest"
 
 var spiffeHelperConfigTemplate = `
     agent_address = {{ .AgentAddress }}
