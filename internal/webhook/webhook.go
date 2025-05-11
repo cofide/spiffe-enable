@@ -117,32 +117,27 @@ static_resources:
 `
 
 var nftablesSetupScript = `
+if ! command -v nft &> /dev/null; then
+    echo "nftables (nft) is not installed"
+    exit 1
+fi
+
 cat <<EOF > /tmp/dns_redirect.nft
-#!/usr/sbin/nft -f
-define ENVOY_PROXY_UID = 1337
-define ENVOY_DNS_LISTEN_PORT = 15053
-define K8S_DNS_PORT = 53
-define DNS_TABLE_NAME = envoy_dns_interception_webhook # Using a distinct table name
-
-# Delete the table if it exists to ensure a clean state for these specific rules.
-# "2>/dev/null || true" suppresses errors if the table doesn't exist.
-delete table inet \$DNS_TABLE_NAME 2>/dev/null || true
-
-# Add (create) our dedicated table.
-add table inet \$DNS_TABLE_NAME
-
-# Add the chain to our table for NAT output redirection.
-add chain inet \$DNS_TABLE_NAME redirect_dns_output {
-    type nat hook output priority -100; policy accept;
+table inet envoy_dns_interception {
+	chain redirect_dns_output {
+		type nat hook output priority -100; policy accept;
+		meta skuid != 1337 udp dport 53 redirect to :15053 comment "Webhook: UDP DNS to Envoy"
+		meta skuid != 1337 tcp dport 53 redirect to :15053 comment "Webhook: TCP DNS to Envoy"
+	}
 }
-
-# Add the DNS redirection rules.
-add rule inet \$DNS_TABLE_NAME redirect_dns_output meta skuid != \$ENVOY_PROXY_UID udp dport \$K8S_DNS_PORT redirect to :\$ENVOY_DNS_LISTEN_PORT comment "Webhook: UDP DNS to Envoy"
-add rule inet \$DNS_TABLE_NAME redirect_dns_output meta skuid != \$ENVOY_PROXY_UID tcp dport \$K8S_DNS_PORT redirect to :\$ENVOY_DNS_LISTEN_PORT comment "Webhook: TCP DNS to Envoy"
 EOF
+
 # Apply the nftables rules from the created file
 nft -f /tmp/dns_redirect.nft
 echo "nftables DNS redirection rules applied."
+
+echo "Applied rules:"
+nft list table inet envoy_dns_interception
 `
 
 type envoyTemplateData struct {
