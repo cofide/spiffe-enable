@@ -126,8 +126,8 @@ cat <<EOF > /tmp/dns_redirect.nft
 table inet envoy_dns_interception {
 	chain redirect_dns_output {
 		type nat hook output priority -100; policy accept;
-		meta skuid != 1337 udp dport 53 redirect to :15053 comment "Webhook: UDP DNS to Envoy"
-		meta skuid != 1337 tcp dport 53 redirect to :15053 comment "Webhook: TCP DNS to Envoy"
+		meta skuid != 101 udp dport 53 redirect to :15053 comment "Webhook: UDP DNS to Envoy"
+		meta skuid != 101 tcp dport 53 redirect to :15053 comment "Webhook: TCP DNS to Envoy"
 	}
 }
 EOF
@@ -351,6 +351,11 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 					Command:         []string{"envoy"},
 					Args:            []string{"-c", "/etc/envoy/envoy.yaml"},
 					VolumeMounts:    []corev1.VolumeMount{{Name: envoyConfigVolumeName, MountPath: envoyConfigMountPath}},
+					SecurityContext: &corev1.SecurityContext{
+						RunAsUser:    ptr.To(int64(101)), // # Run as non-root user
+						RunAsGroup:   ptr.To(int64(101)), // # Run as non-root group
+						RunAsNonRoot: ptr.To(true),
+					},
 					Ports: []corev1.ContainerPort{
 						{ContainerPort: envoyProxyPort},
 					},
