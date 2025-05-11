@@ -65,7 +65,7 @@ var spiffeHelperConfigTemplate = `
 `
 
 type spiffeHelperTemplateData struct {
-	AgentAddresss string
+	AgentAddress string
 }
 
 var envoyConfigTemplate = `
@@ -366,7 +366,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 			}
 
 			templateData := spiffeHelperTemplateData{
-				AgentAddresss: spiffeWLSocketPath,
+				AgentAddress: spiffeWLSocketPath,
 			}
 
 			var configBuf bytes.Buffer
