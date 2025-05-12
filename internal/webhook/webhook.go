@@ -22,6 +22,8 @@ const modeAnnotation = "spiffe.cofide.io/mode"
 const modeAnnotationHelper = "helper"
 const modeAnnotationProxy = "proxy"
 
+const spiffeHelperIncntermediateAnnotation = "spiffe.cofide.io/spiffe-helper/include-intermediate-bundle"
+
 const spiffeWLVolume = "spiffe-workload-api"
 const spiffeWLMountPath = "/spiffe-workload-api"
 const spiffeWLSocketEnvName = "SPIFFE_ENDPOINT_SOCKET"
@@ -46,6 +48,8 @@ const spiffeHelperConfigContentEnvVar = "SPIFFE_HELPER_CONFIG"
 const spiffeHelperConfigMountPath = "/etc/spiffe-helper"
 const spiffeHelperConfigFileName = "config.conf"
 const spiffeHelperInitContainerName = "inject-spiffe-helper-config"
+
+const spiffeEnableCertVolumeName = "spiffe-enable-certs"
 const spiffeEnableCertDirectory = "/spiffe-enable"
 
 var envoyImage = "envoyproxy/envoy:v1.33-latest"
@@ -55,6 +59,9 @@ var initHelperImage = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiff
 var spiffeHelperConfigTemplate = `
 agent_address = "{{ .AgentAddress }}"
 include_federated_domains = true
+{{ if .IncludeIntermediateBundle }}
+add_intermediates_to_bundle = true
+{{ end }}
 cmd = ""
 cmd_args = ""
 cert_dir = "{{ .CertPath }}"
@@ -68,8 +75,9 @@ daemon_mode = true
 `
 
 type spiffeHelperTemplateData struct {
-	AgentAddress string
-	CertPath     string
+	AgentAddress        string
+	CertPath            string
+	IncludeIntermediate bool
 }
 
 var envoyConfigTemplate = `
@@ -382,9 +390,25 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 				})
 			}
 
+			// Add an emptyDir volume for the certs managed by SPIFFE Helper
+			if !volumeExists(pod, spiffeEnableCertVolumeName) {
+				logger.Info("Adding SPIFFE helper certs volume", "volumeName", spiffeEnableCertVolumeName)
+				pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+					Name:         spiffeEnableCertVolumeName,
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+				})
+			}
+
+			incIntermediateBundle := false
+			incIntermediateValue, incIntermediateExists := pod.Annotations[spiffeHelperIncntermediateAnnotation]
+			if incIntermediateExists && incIntermediateValue == "true" {
+				incIntermediateBundle = true
+			}
+
 			templateData := spiffeHelperTemplateData{
-				AgentAddress: spiffeWLSocketPath,
-				CertPath:     spiffeEnableCertDirectory,
+				AgentAddress:        spiffeWLSocketPath,
+				CertPath:            spiffeEnableCertDirectory,
+				IncludeIntermediate: incIntermediateBundle,
 			}
 
 			var configBuf bytes.Buffer
@@ -397,9 +421,8 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 			if !initContainerExists(pod, spiffeHelperInitContainerName) {
 				logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", spiffeHelperInitContainerName)
 				configFilePath := filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)
-				writeCmd := fmt.Sprintf("mkdir -p %s && mkdir -p %s && printf %%s \"$${%s}\" > %s && echo -e \"\\n=== SPIFFE Helper Config ===\" && cat %s && echo -e \"\\n===========================\"",
+				writeCmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s && echo -e \"\\n=== SPIFFE Helper Config ===\" && cat %s && echo -e \"\\n===========================\"",
 					filepath.Dir(configFilePath),
-					spiffeEnableCertDirectory,
 					spiffeHelperConfigContentEnvVar,
 					configFilePath,
 					configFilePath)
@@ -411,7 +434,10 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 					Command:         []string{"/bin/sh", "-c"},
 					Args:            []string{writeCmd},
 					Env:             []corev1.EnvVar{{Name: spiffeHelperConfigContentEnvVar, Value: spiffeHelperConfig}},
-					VolumeMounts:    []corev1.VolumeMount{{Name: spiffeHelperConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
+					VolumeMounts: []corev1.VolumeMount{
+						{Name: spiffeHelperConfigVolumeName, MountPath: filepath.Dir(configFilePath)},
+						{Name: spiffeEnableCertVolumeName, MountPath: spiffeEnableCertDirectory},
+					},
 				}
 				pod.Spec.InitContainers = append([]corev1.Container{initContainer}, pod.Spec.InitContainers...)
 			}
@@ -425,6 +451,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 					Args:            []string{"-config", filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)},
 					VolumeMounts: []corev1.VolumeMount{
 						{Name: spiffeHelperConfigVolumeName, MountPath: spiffeHelperConfigMountPath, ReadOnly: true},
+						{Name: spiffeEnableCertVolumeName, MountPath: spiffeEnableCertDirectory},
 						spiffeVolumeMount,
 					},
 				}
