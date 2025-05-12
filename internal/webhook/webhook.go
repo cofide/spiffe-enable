@@ -46,6 +46,7 @@ const spiffeHelperConfigContentEnvVar = "SPIFFE_HELPER_CONFIG"
 const spiffeHelperConfigMountPath = "/etc/spiffe-helper"
 const spiffeHelperConfigFileName = "config.conf"
 const spiffeHelperInitContainerName = "inject-spiffe-helper-config"
+const spiffeEnableCertDirectory = "/spiffe-enable"
 
 var envoyImage = "envoyproxy/envoy:v1.33-latest"
 var spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
@@ -394,8 +395,9 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 			if !initContainerExists(pod, spiffeHelperInitContainerName) {
 				logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", spiffeHelperInitContainerName)
 				configFilePath := filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)
-				writeCmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s && echo -e \"\\n=== SPIFFE Helper Config ===\" && cat %s && echo -e \"\\n===========================\"",
+				writeCmd := fmt.Sprintf("mkdir -p %s && mkdir -p %s && printf %%s \"$${%s}\" > %s && echo -e \"\\n=== SPIFFE Helper Config ===\" && cat %s && echo -e \"\\n===========================\"",
 					filepath.Dir(configFilePath),
+					spiffeEnableCertDirectory,
 					spiffeHelperConfigContentEnvVar,
 					configFilePath,
 					configFilePath)
