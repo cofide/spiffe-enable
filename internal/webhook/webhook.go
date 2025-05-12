@@ -22,7 +22,7 @@ const modeAnnotation = "spiffe.cofide.io/mode"
 const modeAnnotationHelper = "helper"
 const modeAnnotationProxy = "proxy"
 
-const spiffeHelperIncntermediateAnnotation = "spiffe.cofide.io/spiffe-helper/include-intermediate-bundle"
+const spiffeHelperIncIntermediateAnnotation = "spiffe.cofide.io/spiffe-helper-include-intermediate-bundle"
 
 const spiffeWLVolume = "spiffe-workload-api"
 const spiffeWLMountPath = "/spiffe-workload-api"
@@ -75,9 +75,9 @@ daemon_mode = true
 `
 
 type spiffeHelperTemplateData struct {
-	AgentAddress        string
-	CertPath            string
-	IncludeIntermediate bool
+	AgentAddress              string
+	CertPath                  string
+	IncludeIntermediateBundle bool
 }
 
 var envoyConfigTemplate = `
@@ -279,7 +279,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		// Add CSI volume mounts
 		ensureCSIVolumeMount(container, spiffeVolumeMount, logger)
 		// Add SPIFFE socket environment variable
-		ensureEnvVar(container, spiffeSocketEnvVar, logger)
+		ensureEnvVar(container, spiffeSocketEnvVar)
 	}
 
 	logger.Info("Observed pod annotations", "annotations", pod.Annotations)
@@ -400,15 +400,15 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 			}
 
 			incIntermediateBundle := false
-			incIntermediateValue, incIntermediateExists := pod.Annotations[spiffeHelperIncntermediateAnnotation]
+			incIntermediateValue, incIntermediateExists := pod.Annotations[spiffeHelperIncIntermediateAnnotation]
 			if incIntermediateExists && incIntermediateValue == "true" {
 				incIntermediateBundle = true
 			}
 
 			templateData := spiffeHelperTemplateData{
-				AgentAddress:        spiffeWLSocketPath,
-				CertPath:            spiffeEnableCertDirectory,
-				IncludeIntermediate: incIntermediateBundle,
+				AgentAddress:              spiffeWLSocketPath,
+				CertPath:                  spiffeEnableCertDirectory,
+				IncludeIntermediateBundle: incIntermediateBundle,
 			}
 
 			var configBuf bytes.Buffer
@@ -502,7 +502,7 @@ func ensureCSIVolumeMount(container *corev1.Container, targetMount corev1.Volume
 	return madeChange
 }
 
-func ensureEnvVar(container *corev1.Container, envVar corev1.EnvVar, logger logr.Logger) {
+func ensureEnvVar(container *corev1.Container, envVar corev1.EnvVar) {
 	if !envVarExists(container, envVar.Name) {
 		container.Env = append(container.Env, envVar)
 	}
