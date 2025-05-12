@@ -63,7 +63,7 @@ svid_file_name = "tls.crt"
 svid_key_file_name = "tls.key"
 svid_bundle_file_name = "ca.pem"
 jwt_bundle_file_name = "cert.jwt"
-jwt_svids = [{jwt_audience="test", jwt_svid_file_name="jwt_svid.token"}]
+jwt_svids = [{jwt_svid_file_name="jwt_svid.token"}]
 daemon_mode = true
 `
 
