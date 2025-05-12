@@ -50,7 +50,7 @@ const spiffeEnableCertDirectory = "/spiffe-enable"
 
 var envoyImage = "envoyproxy/envoy:v1.33-latest"
 var spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
-var initHelperImage = "spiffe-enable-init:latest"
+var initHelperImage = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-init:v0.1.0-alpha"
 
 var spiffeHelperConfigTemplate = `
 agent_address = "{{ .AgentAddress }}"
