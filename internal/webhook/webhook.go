@@ -57,7 +57,7 @@ agent_address = "{{ .AgentAddress }}"
 include_federated_domains = true
 cmd = ""
 cmd_args = ""
-cert_dir = "/tmp"
+cert_dir = "{{ .CertPath }}"
 renew_signal = ""
 svid_file_name = "tls.crt"
 svid_key_file_name = "tls.key"
@@ -69,6 +69,7 @@ daemon_mode = true
 
 type spiffeHelperTemplateData struct {
 	AgentAddress string
+	CertPath     string
 }
 
 var envoyConfigTemplate = `
@@ -383,6 +384,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 
 			templateData := spiffeHelperTemplateData{
 				AgentAddress: spiffeWLSocketPath,
+				CertPath:     spiffeEnableCertDirectory,
 			}
 
 			var configBuf bytes.Buffer
