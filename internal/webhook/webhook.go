@@ -373,7 +373,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		case modeAnnotationHelper:
 			logger.Info("Applying 'helper' mode mutations")
 
-			// Add an emptyDir volume for the SPIFFE Helper configiuration if it doesn't already exist
+			// Add an emptyDir volume for the SPIFFE Helper configuration if it doesn't already exist
 			if !volumeExists(pod, spiffeHelperConfigVolumeName) {
 				logger.Info("Adding SPIFFE helper config volume", "volumeName", spiffeHelperConfigVolumeName)
 				pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
