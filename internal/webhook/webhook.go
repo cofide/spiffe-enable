@@ -20,7 +20,6 @@ import (
 const enabledAnnotation = "spiffe.cofide.io/enabled"
 const modeAnnotation = "spiffe.cofide.io/mode"
 const modeAnnotationHelper = "helper"
-const modeAnnotationProxy = "proxy"
 
 const spiffeHelperIncIntermediateAnnotation = "spiffe.cofide.io/spiffe-helper-include-intermediate-bundle"
 
@@ -29,18 +28,6 @@ const spiffeWLMountPath = "/spiffe-workload-api"
 const spiffeWLSocketEnvName = "SPIFFE_ENDPOINT_SOCKET"
 const spiffeWLSocket = "unix:///spiffe-workload-api/spire-agent.sock"
 const spiffeWLSocketPath = "/spiffe-workload-api/spire-agent.sock"
-
-const agentXDSPort = 18001
-const agentXDSService = "cofide-agent.cofide.svc.cluster.local"
-const envoyProxyPort = 10000
-
-const envoySidecarContainerName = "envoy-sidecar"
-const envoyConfigVolumeName = "envoy-config"
-const envoyConfigMountPath = "/etc/envoy"
-const envoyConfigFileName = "envoy.yaml"
-const envoyConfigContentEnvVar = "ENVOY_CONFIG_CONTENT"
-
-const envoyConfigInitContainerName = "inject-envoy-config"
 
 const spiffeHelperConfigVolumeName = "spiffe-helper-config"
 const spiffeHelperSidecarContainerName = "spiffe-helper"
@@ -52,7 +39,6 @@ const spiffeHelperInitContainerName = "inject-spiffe-helper-config"
 const spiffeEnableCertVolumeName = "spiffe-enable-certs"
 const spiffeEnableCertDirectory = "/spiffe-enable"
 
-var envoyImage = "envoyproxy/envoy:v1.33-latest"
 var spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
 var initHelperImage = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-init:v0.1.0-alpha"
 
@@ -80,89 +66,11 @@ type spiffeHelperTemplateData struct {
 	IncludeIntermediateBundle bool
 }
 
-var envoyConfigTemplate = `
-node:
-  id: node
-  cluster: cluster
-
-# Dynamic resource configuration
-dynamic_resources:
-  # Configure ADS (Aggregated Discovery Service)
-  ads_config:
-    api_type: GRPC
-    transport_api_version: V3 # Use the v3 xDS API
-    grpc_services:
-      - envoy_grpc:
-          cluster_name: xds_cluster
-    set_node_on_first_message_only: true # Optimization for ADS
-
-  # Configure CDS (Cluster Discovery Service) to use ADS
-  cds_config:
-    resource_api_version: V3
-    ads: {} 
-
-  lds_config:
-    resource_api_version: V3
-    ads: {} 
-
-static_resources:
-  clusters:
-    - name: xds_cluster 
-      type: LOGICAL_DNS 
-      connect_timeout: 5s
-      # xDS uses gRPC, which requires HTTP/2
-      typed_extension_protocol_options:
-        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
-          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
-          explicit_http_config:
-            http2_protocol_options: {} # Enable HTTP/2
-
-      load_assignment:
-        cluster_name: xds_cluster
-        endpoints:
-          - lb_endpoints:
-              - endpoint:
-                  address:
-                    socket_address:
-                      address: {{ .AgentXDSService }}
-                      port_value: {{ .AgentXDSPort }}
-`
-
-var nftablesSetupScript = `
-if ! command -v nft &> /dev/null; then
-    echo "nftables (nft) is not installed"
-    exit 1
-fi
-
-cat <<EOF > /tmp/dns_redirect.nft
-table inet envoy_dns_interception {
-	chain redirect_dns_output {
-		type nat hook output priority -100; policy accept;
-		meta skuid != 101 udp dport 53 redirect to :15053 comment "Webhook: UDP DNS to Envoy"
-		meta skuid != 101 tcp dport 53 redirect to :15053 comment "Webhook: TCP DNS to Envoy"
-	}
-}
-EOF
-
-# Apply the nftables rules from the created file
-nft -f /tmp/dns_redirect.nft
-echo "nftables DNS redirection rules applied."
-
-echo "Applied rules:"
-nft list table inet envoy_dns_interception
-`
-
-type envoyTemplateData struct {
-	AgentXDSPort    int
-	AgentXDSService string
-}
-
 type spiffeEnableWebhook struct {
 	Client                 client.Client
 	decoder                admission.Decoder
 	Log                    logr.Logger
 	spiffeHelperConfigTmpl *template.Template
-	envoyConfigTmpl        *template.Template
 }
 
 // Helper function to check if a volume already exists
@@ -221,18 +129,11 @@ func NewSpiffeEnableWebhook(client client.Client, log logr.Logger, decoder admis
 		return nil, fmt.Errorf("failed to parse spiffe-helper config template: %w", err)
 	}
 
-	envoyTmpl, err := template.New("envoyConfig").Parse(envoyConfigTemplate)
-	if err != nil {
-		log.Error(err, "Failed to parse Envoy config template")
-		return nil, fmt.Errorf("failed to parse Envoy config template: %w", err)
-	}
-
 	return &spiffeEnableWebhook{
 		Client:                 client,
 		Log:                    log,
 		decoder:                decoder,
 		spiffeHelperConfigTmpl: spiffeHelperTmpl,
-		envoyConfigTmpl:        envoyTmpl,
 	}, nil
 }
 
@@ -288,95 +189,18 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 	modeAnnotationValue, modeAnnotationExists := pod.Annotations[modeAnnotation]
 
 	if modeAnnotationExists {
-		if modeAnnotationValue != modeAnnotationHelper && modeAnnotationValue != modeAnnotationProxy {
+		if modeAnnotationValue != modeAnnotationHelper {
 			err := fmt.Errorf(
-				"invalid value %q for annotation %q; allowed values are %q or %q",
+				"invalid value %q for annotation %q; allowed values is %q",
 				modeAnnotationValue,
 				modeAnnotation,
 				modeAnnotationHelper,
-				modeAnnotationProxy,
 			)
 			logger.Error(err, "Pod rejected due to invalid annotation value", "annotationKey", modeAnnotation, "providedValue", modeAnnotationValue)
 			return admission.Denied(err.Error())
 		}
 
 		switch modeAnnotationValue {
-		// Inject an Envoy proxy sidecar container
-		case modeAnnotationProxy:
-			// Add an emptyDir volume for the Envoyt proxy configiuration if it doesn't already exist
-			if !volumeExists(pod, envoyConfigVolumeName) {
-				logger.Info("Adding Envoy config volume", "volumeName", envoyConfigVolumeName)
-				pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-					Name:         envoyConfigVolumeName,
-					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-				})
-			}
-
-			templateData := envoyTemplateData{
-				AgentXDSPort:    agentXDSPort,
-				AgentXDSService: agentXDSService,
-			}
-
-			var configBuf bytes.Buffer
-			if err := a.envoyConfigTmpl.Execute(&configBuf, templateData); err != nil {
-				logger.Error(err, "Failed to execute Envoy config template")
-				return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to template Envoy config: %w", err))
-			}
-			envoyConfig := configBuf.String()
-
-			// Add an init container to write out the Envoy config to a file
-			if !initContainerExists(pod, envoyConfigInitContainerName) {
-				logger.Info("Adding init container to inject Envoy config", "initContainerName", envoyConfigInitContainerName)
-				configFilePath := filepath.Join(envoyConfigMountPath, envoyConfigFileName)
-
-				// This command writes out an Envoy config file based on the contents of the environment variable
-				envoyConfigCmd := fmt.Sprintf("mkdir -p %s && printf '%%s' \"${%s}\" > %s",
-					filepath.Dir(configFilePath),
-					envoyConfigContentEnvVar,
-					configFilePath)
-
-				cmd := fmt.Sprintf("set -e; %s && %s", envoyConfigCmd, nftablesSetupScript)
-
-				initContainer := corev1.Container{
-					Name:            envoyConfigInitContainerName,
-					Image:           initHelperImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         []string{"/bin/sh", "-c"},
-					Args:            []string{cmd},
-					Env:             []corev1.EnvVar{{Name: envoyConfigContentEnvVar, Value: envoyConfig}},
-					VolumeMounts:    []corev1.VolumeMount{{Name: envoyConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
-					SecurityContext: &corev1.SecurityContext{
-						Capabilities: &corev1.Capabilities{
-							Add: []corev1.Capability{"NET_ADMIN"},
-						},
-						RunAsUser: ptr.To(int64(0)), // # Run as root to apply nftables rules
-					},
-				}
-				pod.Spec.InitContainers = append([]corev1.Container{initContainer}, pod.Spec.InitContainers...)
-			}
-
-			// Add the Envoy container as a sidecar
-			if !containerExists(pod.Spec.Containers, envoySidecarContainerName) {
-				logger.Info("Adding Envoy proxy sidecar container", "containerName", envoySidecarContainerName)
-				envoySidecar := corev1.Container{
-					Name:            envoySidecarContainerName,
-					Image:           envoyImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         []string{"envoy"},
-					Args:            []string{"-c", "/etc/envoy/envoy.yaml"},
-					VolumeMounts:    []corev1.VolumeMount{{Name: envoyConfigVolumeName, MountPath: envoyConfigMountPath}},
-					SecurityContext: &corev1.SecurityContext{
-						RunAsUser:    ptr.To(int64(101)), // # Run as non-root user
-						RunAsGroup:   ptr.To(int64(101)), // # Run as non-root group
-						RunAsNonRoot: ptr.To(true),
-					},
-					Ports: []corev1.ContainerPort{
-						{ContainerPort: envoyProxyPort},
-					},
-				}
-				pod.Spec.Containers = append(pod.Spec.Containers, envoySidecar)
-			}
-
 		// Inject a spiffe-helper sidecar container
 		case modeAnnotationHelper:
 			logger.Info("Applying 'helper' mode mutations")
