@@ -1,4 +1,0 @@
-FROM alpine:latest
-
-# Install nftables
-RUN apk add --no-cache nftables
