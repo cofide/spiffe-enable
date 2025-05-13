@@ -1,12 +1,28 @@
-# React + Vite
+# SPIFFE Certificate Viewer UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React-based UI for viewing SPIFFE SVID certificates and CA bundle certificates.
 
-Currently, two official plugins are available:
+## Overview
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+This UI component displays X.509 certificates using the [@peculiar/certificates-viewer-react](https://www.npmjs.com/package/@peculiar/certificates-viewer-react) library. It provides a toggle to switch between viewing SVID certificates and CA bundle certificates.
 
-## Expanding the ESLint configuration
+## Development
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+npm install
+npm run dev
+```
+
+The UI will run in development mode with placeholder certificate data.
+
+## Building
+
+```bash
+npm run build
+```
+
+This will create a production build in the `dist` directory.
+
+## Integration with Go Server
+
+In production, this UI is embedded into a Go HTTP server that injects real certificate data from the SPIFFE Workload API. See the top-level README for more information about the complete system.
