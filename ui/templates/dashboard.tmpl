@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>spiffe-enable debug dashboard</title>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@peculiar/certificates-viewer/dist/peculiar/peculiar.esm.js"></script>
+  <script nomodule src="https://cdn.jsdelivr.net/npm/@peculiar/certificates-viewer/dist/peculiar/peculiar.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@peculiar/certificates-viewer/dist/peculiar/peculiar.css" />
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <h1>SPIFFE Workload Dashboard</h1>
+  
+  <div class="dashboard">
+    <button id="show-svid">Display SVID Certificates</button>
+    <button id="show-ca">Display CA Bundle Certificates</button>
+  </div>
+  
+  <div id="certificate-container"></div>
+
+  <script>
+    const svidCertsRawJSON = {{.SVIDCertificates}};
+    const caCertsRawJSON = {{.CACertificates}};
+
+    const svidCertsRaw = svidCertsRawJSON;
+    const caCertsRaw = caCertsRawJSON;
+
+    function convertLineBreaks(certString) {
+      return certString.replace(/\n/g, '');
+    }
+
+    const svidCerts = svidCertsRaw.map(cert => ({
+        name: cert.name,
+        certificate: cert.certificate
+    }));
+
+    const caCerts = caCertsRaw.map(cert => ({
+        name: cert.name,
+        certificate: cert.certificate
+    }));
+
+    // Function to display certificates
+    function displayCertificates(certificates) {
+      const container = document.getElementById('certificate-container');
+      container.innerHTML = '';
+      
+      // Create a peculiar-certificates-viewer element to display certificates
+      const certificatesViewer = document.createElement('peculiar-certificates-viewer');
+      certs = certificates.map(cert => ({
+        value: cert.certificate }))
+      console.log(certs)
+
+      certificatesViewer.certificates = certs
+      
+      // Set additional properties if needed
+      certificatesViewer.setAttribute('list-title', 'Certificate List');
+      
+      container.appendChild(certificatesViewer);
+    }
+
+    // Event listeners for buttons
+    document.getElementById('show-svid').addEventListener('click', () => {
+      displayCertificates(svidCerts);
+    });
+
+    document.getElementById('show-ca').addEventListener('click', () => {
+      displayCertificates(caCerts);
+    });
+  </script>
+  
+  <!-- Footer section -->
+  <footer class="footer">
+  <div class="footer-logo">
+    <a href="https://www.cofide.io">
+      <img src="static/cofide-colour-blue.svg" width="40" alt="Cofide">
+    </a>
+  </div>
+  <p>
+    <a href="https://github.com/cofide/spiffe-enable" target="_blank">spiffe-enable</a> is an OSS project from <a href="https://www.cofide.io" target="_blank">Cofide</a>.<br/>
+    Learn more about <a href="https://cofide.io/#solution" target="_blank">Cofide Connect</a> the open standards workload identity platform.
+  </p>
+  </footer>
+</body>
+</html>
