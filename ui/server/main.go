@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	apiTimeout          = 5 * time.Second
+	apiTimeout          = 30 * time.Second
 	defaultSpiffeSocket = "unix:///spiffe-workload-api/spire-agent.sock"
 	timeFormat          = time.RFC3339
 )
