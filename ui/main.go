@@ -9,6 +9,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/spiffe/go-spiffe/v2/logger"
@@ -16,9 +17,13 @@ import (
 )
 
 const (
-	apiTimeout   = 5 * time.Second
-	spiffeSocket = "unix:///spiffe-workload-api/spire-agent.sock"
-	timeFormat   = time.RFC3339
+	apiTimeout          = 5 * time.Second
+	defaultSpiffeSocket = "unix:///spiffe-workload-api/spire-agent.sock"
+	timeFormat          = time.RFC3339
+)
+
+var (
+	spiffeSocket string
 )
 
 type Certificate struct {
@@ -29,6 +34,14 @@ type Certificate struct {
 type PageData struct {
 	SVIDCertificates template.JS
 	CACertificates   template.JS
+}
+
+func init() {
+	if socketStr := os.Getenv("SPIFFE_ENDPOINT_SOCKET"); socketStr != "" {
+		spiffeSocket = socketStr
+	} else {
+		spiffeSocket = defaultSpiffeSocket
+	}
 }
 
 func main() {
