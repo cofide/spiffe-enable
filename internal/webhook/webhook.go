@@ -179,15 +179,6 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		Value: spiffeWLSocket,
 	}
 
-	// Process each (standard) container in the pod
-	for i := range pod.Spec.Containers {
-		container := &pod.Spec.Containers[i]
-		// Add CSI volume mounts
-		ensureCSIVolumeMount(container, spiffeVolumeMount, logger)
-		// Add SPIFFE socket environment variable
-		ensureEnvVar(container, spiffeSocketEnvVar)
-	}
-
 	logger.Info("Observed pod annotations", "annotations", pod.Annotations)
 
 	// Check for a debug annotation
@@ -197,15 +188,23 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		if !containerExists(pod.Spec.Containers, debugUIContainerName) {
 			logger.Info("Adding SPIFFE Enable debug UI container", "containerName", debugUIContainerName)
 			debugSidecar := corev1.Container{
-				Name:            debugUIContainerName,
-				Image:           debugUIImage,
-				ImagePullPolicy: corev1.PullIfNotPresent,
+				Name:  debugUIContainerName,
+				Image: debugUIImage,
 				Ports: []corev1.ContainerPort{
 					{ContainerPort: 8080},
 				},
 			}
 			pod.Spec.Containers = append(pod.Spec.Containers, debugSidecar)
 		}
+	}
+
+	// Process each (standard) container in the pod
+	for i := range pod.Spec.Containers {
+		container := &pod.Spec.Containers[i]
+		// Add CSI volume mounts
+		ensureCSIVolumeMount(container, spiffeVolumeMount, logger)
+		// Add SPIFFE socket environment variable
+		ensureEnvVar(container, spiffeSocketEnvVar)
 	}
 
 	// Check for a mode annotation and process based on the value
