@@ -1,4 +1,4 @@
-# Build the manager binary
+# Build the UI binary
 FROM cgr.dev/chainguard/go:latest AS builder
 ARG TARGETOS
 ARG TARGETARCH
