@@ -102,15 +102,18 @@ func main() {
 
 	// Serve the dashboard
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		reqCtx, reqCancel := context.WithTimeout(r.Context(), apiTimeout)
+		defer reqCancel()
+
 		// Get SVID certificates
-		svidCerts, err := loadSVIDCertificates(ctx, client)
+		svidCerts, err := loadSVIDCertificates(reqCtx, client)
 		if err != nil {
 			log.Printf("Error loading SVID certificates: %v", err)
 			http.Error(w, "Error loading certificates", http.StatusInternalServerError)
 			return
 		}
 
-		caCerts, err := loadCACertificates(ctx, client)
+		caCerts, err := loadCACertificates(reqCtx, client)
 		if err != nil {
 			log.Printf("Error loading CA certificates: %v", err)
 			http.Error(w, "Error loading certificates", http.StatusInternalServerError)
