@@ -19,6 +19,8 @@ import (
 
 const enabledAnnotation = "spiffe.cofide.io/enabled"
 const modeAnnotation = "spiffe.cofide.io/mode"
+const debugAnnotation = "spiffe.cofide.io/debug"
+
 const modeAnnotationHelper = "helper"
 
 const spiffeHelperIncIntermediateAnnotation = "spiffe.cofide.io/spiffe-helper-include-intermediate-bundle"
@@ -39,8 +41,11 @@ const spiffeHelperInitContainerName = "inject-spiffe-helper-config"
 const spiffeEnableCertVolumeName = "spiffe-enable-certs"
 const spiffeEnableCertDirectory = "/spiffe-enable"
 
+const debugUIContainerName = "spiffe-enable-ui"
+
 var spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
 var initHelperImage = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-init:v0.1.0-alpha"
+var debugUIImage = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-ui:v0.1.0-alpha"
 
 var spiffeHelperConfigTemplate = `
 agent_address = "{{ .AgentAddress }}"
@@ -184,6 +189,24 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 	}
 
 	logger.Info("Observed pod annotations", "annotations", pod.Annotations)
+
+	// Check for a debug annotation
+	debugAnnotationValue, debugAnnotationExists := pod.Annotations[debugAnnotation]
+
+	if debugAnnotationExists && debugAnnotationValue == "true" {
+		if !containerExists(pod.Spec.Containers, debugUIContainerName) {
+			logger.Info("Adding SPIFFE Enable debug UI container", "containerName", debugUIContainerName)
+			debugSidecar := corev1.Container{
+				Name:            debugUIContainerName,
+				Image:           debugUIImage,
+				ImagePullPolicy: corev1.PullIfNotPresent,
+				Ports: []corev1.ContainerPort{
+					{ContainerPort: 8080},
+				},
+			}
+			pod.Spec.Containers = append(pod.Spec.Containers, debugSidecar)
+		}
+	}
 
 	// Check for a mode annotation and process based on the value
 	modeAnnotationValue, modeAnnotationExists := pod.Annotations[modeAnnotation]
