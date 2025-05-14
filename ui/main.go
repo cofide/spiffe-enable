@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
 	"log/slog"
 	"net/http"
@@ -25,6 +27,9 @@ const (
 var (
 	spiffeSocket string
 )
+
+//go:embed static
+var uiAssets embed.FS
 
 type Certificate struct {
 	Name        string `json:"name"`
@@ -61,8 +66,17 @@ func main() {
 		log.Fatalf("Error parsing template: %v", err)
 	}
 
+	// Create a sub-filesystem for the embedded UI assets
+	subFS, err := fs.Sub(uiAssets, "static")
+	if err != nil {
+		log.Fatalf("Failed to create sub-filesystem: %v", err)
+	}
+
+	// Set up a file server for static assets
+	fileServer := http.FileServer(http.FS(subFS))
+
 	// Serve static files
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	http.Handle("/static/", http.StripPrefix("/static/", fileServer))
 
 	// Serve the dashboard
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
