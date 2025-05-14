@@ -188,8 +188,9 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		if !containerExists(pod.Spec.Containers, debugUIContainerName) {
 			logger.Info("Adding SPIFFE Enable debug UI container", "containerName", debugUIContainerName)
 			debugSidecar := corev1.Container{
-				Name:  debugUIContainerName,
-				Image: debugUIImage,
+				Name:            debugUIContainerName,
+				Image:           debugUIImage,
+				ImagePullPolicy: corev1.PullAlways,
 				Ports: []corev1.ContainerPort{
 					{ContainerPort: 8080},
 				},
