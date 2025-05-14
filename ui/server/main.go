@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"io/fs"
 	"log"
 	"log/slog"
@@ -30,6 +31,9 @@ var (
 
 //go:embed static
 var uiAssets embed.FS
+
+//go:embed templates
+var tmplAssets embed.FS
 
 type Certificate struct {
 	Name        string `json:"name"`
@@ -60,8 +64,26 @@ func main() {
 
 	defer client.Close()
 
+	subTmplFS, err := fs.Sub(tmplAssets, "templates")
+	if err != nil {
+		log.Fatalf("Failed to create sub-filesystem: %v", err)
+	}
+
 	// Load the dashboard template
-	tmpl, err := template.ParseFiles("templates/dashboard.tmpl")
+	tmplFile, err := subTmplFS.Open("dashboard.tmpl")
+	if err != nil {
+		log.Fatalf("Failed to open template file: %v", err)
+	}
+	defer tmplFile.Close()
+
+	// Read the content of the template file
+	tmplBytes, err := io.ReadAll(tmplFile)
+	if err != nil {
+		log.Fatalf("Failed to read template file: %v", err)
+	}
+
+	// Create a new template and parse its content
+	tmpl, err := template.New("dashboard").Parse(string(tmplBytes))
 	if err != nil {
 		log.Fatalf("Error parsing template: %v", err)
 	}
