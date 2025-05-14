@@ -50,6 +50,8 @@ func init() {
 	} else {
 		spiffeSocket = defaultSpiffeSocket
 	}
+
+	log.Printf("Using SPIFFE endpoint socket: %s\n", spiffeSocket)
 }
 
 func main() {
