@@ -36,10 +36,13 @@ var tmplAssets embed.FS
 
 type Certificate struct {
 	Name        string `json:"name"`
+	TrustDomain string `json:"td"`
 	Certificate string `json:"certificate"`
 }
 
 type PageData struct {
+	SpiffeID         string
+	TrustDomain      string
 	SVIDCertificates template.JS
 	CACertificates   template.JS
 }
@@ -62,7 +65,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to create workload API client: %v", err)
 	}
-
 	defer client.Close()
 
 	subTmplFS, err := fs.Sub(tmplAssets, "templates")
@@ -137,6 +139,8 @@ func main() {
 
 		// Prepare data for template
 		data := PageData{
+			SpiffeID:         svidCerts[0].Name,
+			TrustDomain:      svidCerts[0].TrustDomain,
 			SVIDCertificates: template.JS(svidCertsJSON),
 			CACertificates:   template.JS(caCertsJSON),
 		}
@@ -169,6 +173,7 @@ func loadSVIDCertificates(ctx context.Context, client *workloadapi.Client) ([]Ce
 
 		c := Certificate{
 			Name:        s.ID.URL().String(),
+			TrustDomain: s.ID.TrustDomain().Name(),
 			Certificate: base64.StdEncoding.EncodeToString(cert),
 		}
 		certificates = append(certificates, c)

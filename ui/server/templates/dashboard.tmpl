@@ -7,10 +7,23 @@
   <script type="module" src="https://cdn.jsdelivr.net/npm/@peculiar/certificates-viewer/dist/peculiar/peculiar.esm.js"></script>
   <script nomodule src="https://cdn.jsdelivr.net/npm/@peculiar/certificates-viewer/dist/peculiar/peculiar.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@peculiar/certificates-viewer/dist/peculiar/peculiar.css" />
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap" rel="stylesheet">  <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
   <h1>SPIFFE Workload Dashboard</h1>
+
+  <div class="workload-summary">
+  <div>
+    <span class="label">SPIFFE ID:</span>
+    <span id="spiffe-id-value" class="value">{{.SpiffeID}}</span>
+  </div>
+  <div>
+    <span class="label">Trust Domain:</span>
+    <span id="trust-domain-value" class="value">{{.TrustDomain}}</span>
+  </div>
+  </div>
   
   <div class="dashboard">
     <button id="show-svid">Display X509-SVID Certificates</button>
