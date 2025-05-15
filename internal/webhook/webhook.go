@@ -136,11 +136,19 @@ fi
 
 cat <<EOF > /tmp/dns_redirect.nft
 table inet envoy_dns_interception {
-	chain redirect_dns_output {
-		type nat hook output priority -100; policy accept;
-		meta skuid != 101 udp dport 53 redirect to :15053 comment "Webhook: UDP DNS to Envoy"
-		meta skuid != 101 tcp dport 53 redirect to :15053 comment "Webhook: TCP DNS to Envoy"
-	}
+    chain redirect_dns_output {
+        type nat hook output priority dstnat; policy accept;
+
+        # Rule to log and accept DNS from skuid 101 (Envoy) - UDP
+        meta skuid == 101 udp dport 53 log prefix "ENVOY_DNS_UDP_OUT (UID 101): " counter accept comment "Log and accept Envoy UDP DNS"
+
+        # Rule to log and accept DNS from skuid 101 (Envoy) - TCP
+        meta skuid == 101 tcp dport 53 log prefix "ENVOY_DNS_TCP_OUT (UID 101): " counter accept comment "Log and accept Envoy TCP DNS"
+
+        # Rules tor redirect DNS
+        meta skuid != 101 udp dport 53 log prefix "REDIRECT_DNS_UDP (skuid != 101): " counter redirect to :15053 comment "Webhook: UDP DNS to Envoy"
+        meta skuid != 101 tcp dport 53 log prefix "REDIRECT_DNS_TCP (skuid != 101): " counter redirect to :15053 comment "Webhook: TCP DNS to Envoy"
+    }
 }
 EOF
 
