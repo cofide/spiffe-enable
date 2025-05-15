@@ -41,10 +41,11 @@ type Certificate struct {
 }
 
 type PageData struct {
-	SpiffeID         string
-	TrustDomain      string
-	SVIDCertificates template.JS
-	CACertificates   template.JS
+	SpiffeID              string
+	TrustDomain           string
+	FederatedTrustDomains []string
+	SVIDCertificates      template.JS
+	CACertificates        template.JS
 }
 
 func init() {
@@ -116,7 +117,7 @@ func main() {
 			return
 		}
 
-		caCerts, err := loadCACertificates(reqCtx, client)
+		caCerts, federatedTDs, err := loadCACertificates(reqCtx, client, svidCerts[0].TrustDomain)
 		if err != nil {
 			log.Printf("Error loading CA certificates: %v", err)
 			http.Error(w, "Error loading certificates", http.StatusInternalServerError)
@@ -139,10 +140,11 @@ func main() {
 
 		// Prepare data for template
 		data := PageData{
-			SpiffeID:         svidCerts[0].Name,
-			TrustDomain:      svidCerts[0].TrustDomain,
-			SVIDCertificates: template.JS(svidCertsJSON),
-			CACertificates:   template.JS(caCertsJSON),
+			SpiffeID:              svidCerts[0].Name,
+			TrustDomain:           svidCerts[0].TrustDomain,
+			FederatedTrustDomains: federatedTDs,
+			SVIDCertificates:      template.JS(svidCertsJSON),
+			CACertificates:        template.JS(caCertsJSON),
 		}
 
 		// Execute template with data
@@ -182,27 +184,38 @@ func loadSVIDCertificates(ctx context.Context, client *workloadapi.Client) ([]Ce
 	return certificates, nil
 }
 
-func loadCACertificates(ctx context.Context, client *workloadapi.Client) ([]Certificate, error) {
+func loadCACertificates(ctx context.Context, client *workloadapi.Client, ownTrustDomainID string) ([]Certificate, []string, error) {
 	var certificates []Certificate
+	var uniqueTrustDomainIDs []string
 
 	bundles, err := client.FetchX509Bundles(ctx)
 	if bundles == nil {
-		return nil, fmt.Errorf("no trust bundles available")
+		return nil, nil, fmt.Errorf("no trust bundles available")
 	}
 
 	if err != nil {
 		slog.Warn("unable to fetch X.509 trust bundles", "error", err)
 	}
 
+	seenTrustDomainIDs := make(map[string]struct{})
+	seenTrustDomainIDs[ownTrustDomainID] = struct{}{}
+
 	for _, b := range bundles.Bundles() {
+		trustDomainID := b.TrustDomain().Name()
+
+		if _, found := seenTrustDomainIDs[trustDomainID]; !found {
+			uniqueTrustDomainIDs = append(uniqueTrustDomainIDs, trustDomainID)
+			seenTrustDomainIDs[trustDomainID] = struct{}{}
+		}
+
 		for _, c := range b.X509Authorities() {
 			cert := Certificate{
-				Name:        b.TrustDomain().IDString(),
+				Name:        trustDomainID,
 				Certificate: base64.StdEncoding.EncodeToString(c.Raw),
 			}
 			certificates = append(certificates, cert)
 		}
 	}
 
-	return certificates, nil
+	return certificates, uniqueTrustDomainIDs, nil
 }
