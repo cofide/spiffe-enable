@@ -290,9 +290,6 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		ensureEnvVar(container, spiffeSocketEnvVar)
 	}
 
-	// For debugging purposes - to be removed
-	pod.Spec.ShareProcessNamespace = ptr.To(true)
-
 	logger.Info("Observed pod annotations", "annotations", pod.Annotations)
 
 	// Check for a mode annotation and process based on the value
