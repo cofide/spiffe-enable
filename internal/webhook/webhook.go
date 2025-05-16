@@ -424,21 +424,21 @@ func ensureCSIVolumeMount(container *corev1.Container, targetMount corev1.Volume
 		if vm.Name == targetMount.Name && vm.MountPath == targetMount.MountPath {
 			mountIndex = i
 			if vm.ReadOnly == targetMount.ReadOnly {
-				mountExists = true // Exact match found
+				mountExists = true
 			}
-			break // Found the mount by name and path, no need to search further
+			break
 		}
 	}
 
 	if !mountExists {
 		if mountIndex != -1 {
-			// Mount exists with the same name and path, but ReadOnly differs. Update it.
+			// Mount exists with the same name and path, but ReadOnly differs so we should update it
 			logger.Info("Updating ReadOnly status for existing VolumeMount",
 				"containerName", container.Name, "volumeMountName", targetMount.Name, "newReadOnly", targetMount.ReadOnly)
 			container.VolumeMounts[mountIndex].ReadOnly = targetMount.ReadOnly
 			madeChange = true
 		} else {
-			// Mount does not exist at all, append it.
+			// Mount does not exist at all, append it
 			logger.Info("Adding new VolumeMount to container",
 				"containerName", container.Name, "volumeMountName", targetMount.Name)
 			container.VolumeMounts = append(container.VolumeMounts, targetMount)
