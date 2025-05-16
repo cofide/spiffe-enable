@@ -80,20 +80,6 @@ func volumeExists(pod *corev1.Pod, volumeName string) bool {
 	return false
 }
 
-// Helper function to check if a volume mount already exists
-func volumeMountExists(pod *corev1.Pod, volumeMountName string) bool {
-	// Check standard containers
-	for _, container := range pod.Spec.Containers {
-		for _, vm := range container.VolumeMounts {
-			if vm.Name == volumeMountName {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
 // Helper function to check if a container already exists
 func containerExists(containers []corev1.Container, containerName string) bool {
 	for _, container := range containers {
