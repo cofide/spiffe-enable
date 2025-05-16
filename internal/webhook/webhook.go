@@ -20,10 +20,9 @@ import (
 
 // Pod annotations
 const (
-	enabledAnnotation                     = "spiffe.cofide.io/enabled"
-	injectAnnotation                      = "spiffe.cofide.io/inject"
-	debugAnnotation                       = "spiffe.cofide.io/debug"
-	spiffeHelperIncIntermediateAnnotation = "spiffe.cofide.io/spiffe-helper-include-intermediate-bundle"
+	enabledAnnotation = "spiffe.cofide.io/enabled"
+	injectAnnotation  = "spiffe.cofide.io/inject"
+	debugAnnotation   = "spiffe.cofide.io/debug"
 )
 
 // Components that can be injected
@@ -62,9 +61,7 @@ const (
 
 // Container images
 var (
-	spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
-	initHelperImage   = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-init:v0.1.0-alpha"
-	debugUIImage      = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-ui:v0.1.0-alpha"
+	debugUIImage = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-ui:v0.1.0-alpha"
 )
 
 type spiffeEnableWebhook struct {
@@ -279,7 +276,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 
 					initContainer := corev1.Container{
 						Name:            proxy.EnvoyConfigInitContainerName,
-						Image:           initHelperImage,
+						Image:           helper.InitHelperImage,
 						ImagePullPolicy: corev1.PullIfNotPresent,
 						Command:         []string{"/bin/sh", "-c"},
 						Args:            []string{cmd},
@@ -340,7 +337,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 				}
 
 				incIntermediateBundle := false
-				incIntermediateValue, incIntermediateExists := pod.Annotations[spiffeHelperIncIntermediateAnnotation]
+				incIntermediateValue, incIntermediateExists := pod.Annotations[helper.SPIFFEHelperIncIntermediateAnnotation]
 				if incIntermediateExists && incIntermediateValue == "true" {
 					incIntermediateBundle = true
 				}
@@ -369,7 +366,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 
 					initContainer := corev1.Container{
 						Name:            helper.SPIFFEHelperInitContainerName,
-						Image:           initHelperImage,
+						Image:           helper.InitHelperImage,
 						ImagePullPolicy: corev1.PullIfNotPresent,
 						Command:         []string{"/bin/sh", "-c"},
 						Args:            []string{writeCmd},
@@ -386,7 +383,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 					logger.Info("Adding SPIFFE Helper sidecar container", "containerName", helper.SPIFFEHelperSidecarContainerName)
 					helperSidecar := corev1.Container{
 						Name:            helper.SPIFFEHelperSidecarContainerName,
-						Image:           spiffeHelperImage,
+						Image:           helper.SPIFFEHelperImage,
 						ImagePullPolicy: corev1.PullIfNotPresent,
 						Args:            []string{"-config", filepath.Join(helper.SPIFFEHelperConfigMountPath, helper.SPIFFEHelperConfigFileName)},
 						VolumeMounts: []corev1.VolumeMount{

@@ -6,14 +6,20 @@ import (
 	"html/template"
 )
 
-// SPIFFE Helper
+// SPIFFE Helper constants
+var (
+	SPIFFEHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
+	InitHelperImage   = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-init:v0.1.0-alpha"
+)
+
 const (
-	SPIFFEHelperConfigVolumeName     = "spiffe-helper-config"
-	SPIFFEHelperSidecarContainerName = "spiffe-helper"
-	SPIFFEHelperConfigContentEnvVar  = "SPIFFE_HELPER_CONFIG"
-	SPIFFEHelperConfigMountPath      = "/etc/spiffe-helper"
-	SPIFFEHelperConfigFileName       = "config.conf"
-	SPIFFEHelperInitContainerName    = "inject-spiffe-helper-config"
+	SPIFFEHelperIncIntermediateAnnotation = "spiffe.cofide.io/spiffe-helper-include-intermediate-bundle"
+	SPIFFEHelperConfigVolumeName          = "spiffe-helper-config"
+	SPIFFEHelperSidecarContainerName      = "spiffe-helper"
+	SPIFFEHelperConfigContentEnvVar       = "SPIFFE_HELPER_CONFIG"
+	SPIFFEHelperConfigMountPath           = "/etc/spiffe-helper"
+	SPIFFEHelperConfigFileName            = "config.conf"
+	SPIFFEHelperInitContainerName         = "inject-spiffe-helper-config"
 )
 
 var spiffeHelperConfigTmpl = `
