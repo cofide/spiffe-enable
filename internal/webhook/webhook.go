@@ -180,8 +180,6 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		Value: spiffeWLSocket,
 	}
 
-	logger.Info("Observed pod annotations", "annotations", pod.Annotations)
-
 	// Check for a debug annotation
 	debugAnnotationValue, debugAnnotationExists := pod.Annotations[debugAnnotation]
 
