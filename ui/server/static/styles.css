@@ -1,0 +1,90 @@
+body {
+  font-family: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.dashboard {
+  margin-bottom: 20px;
+}
+
+button {
+  background-color: #32CEE3;
+  border: none;
+  color: white;
+  padding: 10px 15px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.workload-summary {
+  background-color: #f9f9f9;
+  border: 1px solid #eaeaea;
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.workload-summary div {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+
+.workload-summary div:last-child {
+  margin-bottom: 0;
+}
+
+.workload-summary .label {
+  font-weight: bold;
+  color: #333;
+  margin-right: 8px;
+  min-width: 120px;
+}
+
+.workload-summary .value {
+  color: #1E1F34;
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  word-break: break-all;
+}
+
+/* === Footer and other styles === */
+.footer {
+  margin-top: 40px;
+  padding: 20px 0;
+  border-top: 1px solid #eaeaea;
+  color: #666;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  line-height: 1.6;
+}
+
+.footer p {
+  margin: 0 0 0 10px;
+  line-height: 1.6;
+}
+
+.footer a {
+  color: #1E1F34;
+  text-decoration: none;
+  font-weight: bold; 
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.footer img {
+  vertical-align: middle;
+}
+
+#certificate-container {
+  margin-top: 20px;
+}
