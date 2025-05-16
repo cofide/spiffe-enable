@@ -59,6 +59,7 @@ const spiffeEnableCertDirectory = "/spiffe-enable"
 var envoyImage = "envoyproxy/envoy:v1.33-latest"
 
 const debugUIContainerName = "spiffe-enable-ui"
+const debugUIPort = 8000
 
 var spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
 var initHelperImage = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-init:v0.1.0-alpha"
@@ -196,8 +197,6 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		Value: spiffeWLSocket,
 	}
 
-	logger.Info("Observed pod annotations", "annotations", pod.Annotations)
-
 	// Check for a debug annotation
 	debugAnnotationValue, debugAnnotationExists := pod.Annotations[debugAnnotation]
 
@@ -209,7 +208,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 				Image:           debugUIImage,
 				ImagePullPolicy: corev1.PullAlways,
 				Ports: []corev1.ContainerPort{
-					{ContainerPort: 8080},
+					{ContainerPort: debugUIPort},
 				},
 			}
 			pod.Spec.Containers = append(pod.Spec.Containers, debugSidecar)
