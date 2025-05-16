@@ -156,7 +156,7 @@ table inet envoy_dns_interception {
         # Rule to log and accept DNS from skuid 101 (Envoy) - TCP
         meta skuid == 101 tcp dport 53 log prefix "ENVOY_DNS_TCP_OUT (UID 101): " counter accept comment "Log and accept Envoy TCP DNS"
 
-        # Rules tor redirect DNS
+        # Rules to redirect DNS
         meta skuid != 101 udp dport 53 log prefix "REDIRECT_DNS_UDP (skuid != 101): " counter redirect to :15053 comment "Webhook: UDP DNS to Envoy"
         meta skuid != 101 tcp dport 53 log prefix "REDIRECT_DNS_TCP (skuid != 101): " counter redirect to :15053 comment "Webhook: TCP DNS to Envoy"
     }
@@ -360,7 +360,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		for _, mode := range toInject {
 			switch mode {
 			case injectAnnotationProxy:
-				// Add an emptyDir volume for the Envoyt proxy configiuration if it doesn't already exist
+				// Add an emptyDir volume for the Envoy proxy configuration if it doesn't already exist
 				if !volumeExists(pod, envoyConfigVolumeName) {
 					logger.Info("Adding Envoy config volume", "volumeName", envoyConfigVolumeName)
 					pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
