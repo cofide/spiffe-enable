@@ -19,51 +19,75 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-const enabledAnnotation = "spiffe.cofide.io/enabled"
-const injectAnnotation = "spiffe.cofide.io/inject"
-const debugAnnotation = "spiffe.cofide.io/debug"
+// Pod annotations
+const (
+	enabledAnnotation                     = "spiffe.cofide.io/enabled"
+	injectAnnotation                      = "spiffe.cofide.io/inject"
+	debugAnnotation                       = "spiffe.cofide.io/debug"
+	spiffeHelperIncIntermediateAnnotation = "spiffe.cofide.io/spiffe-helper-include-intermediate-bundle"
+)
 
-const injectAnnotationHelper = "helper"
-const injectAnnotationProxy = "proxy"
+// Components that can be injected
+const (
+	injectAnnotationHelper = "helper"
+	injectAnnotationProxy  = "proxy"
+)
 
-const spiffeHelperIncIntermediateAnnotation = "spiffe.cofide.io/spiffe-helper-include-intermediate-bundle"
+// SPIFFE Workload API
+const (
+	spiffeWLVolume        = "spiffe-workload-api"
+	spiffeWLMountPath     = "/spiffe-workload-api"
+	spiffeWLSocketEnvName = "SPIFFE_ENDPOINT_SOCKET"
+	spiffeWLSocket        = "unix:///spiffe-workload-api/spire-agent.sock"
+	spiffeWLSocketPath    = "/spiffe-workload-api/spire-agent.sock"
+)
 
-const spiffeWLVolume = "spiffe-workload-api"
-const spiffeWLMountPath = "/spiffe-workload-api"
-const spiffeWLSocketEnvName = "SPIFFE_ENDPOINT_SOCKET"
-const spiffeWLSocket = "unix:///spiffe-workload-api/spire-agent.sock"
-const spiffeWLSocketPath = "/spiffe-workload-api/spire-agent.sock"
+// Cofide Agent
+const (
+	agentXDSPort    = 18001
+	agentXDSService = "cofide-agent.cofide.svc.cluster.local"
+	envoyProxyPort  = 10000
+)
 
-const agentXDSPort = 18001
-const agentXDSService = "cofide-agent.cofide.svc.cluster.local"
-const envoyProxyPort = 10000
+// Envoy
+const (
+	envoySidecarContainerName    = "envoy-sidecar"
+	envoyConfigVolumeName        = "envoy-config"
+	envoyConfigMountPath         = "/etc/envoy"
+	envoyConfigFileName          = "envoy.yaml"
+	envoyConfigContentEnvVar     = "ENVOY_CONFIG_CONTENT"
+	envoyConfigInitContainerName = "inject-envoy-config"
+)
 
-const envoySidecarContainerName = "envoy-sidecar"
-const envoyConfigVolumeName = "envoy-config"
-const envoyConfigMountPath = "/etc/envoy"
-const envoyConfigFileName = "envoy.yaml"
-const envoyConfigContentEnvVar = "ENVOY_CONFIG_CONTENT"
+// SPIFFE Helper
+const (
+	spiffeHelperConfigVolumeName     = "spiffe-helper-config"
+	spiffeHelperSidecarContainerName = "spiffe-helper"
+	spiffeHelperConfigContentEnvVar  = "SPIFFE_HELPER_CONFIG"
+	spiffeHelperConfigMountPath      = "/etc/spiffe-helper"
+	spiffeHelperConfigFileName       = "config.conf"
+	spiffeHelperInitContainerName    = "inject-spiffe-helper-config"
+)
 
-const envoyConfigInitContainerName = "inject-envoy-config"
+// SPIFFE Enable
+const (
+	spiffeEnableCertVolumeName = "spiffe-enable-certs"
+	spiffeEnableCertDirectory  = "/spiffe-enable"
+)
 
-const spiffeHelperConfigVolumeName = "spiffe-helper-config"
-const spiffeHelperSidecarContainerName = "spiffe-helper"
-const spiffeHelperConfigContentEnvVar = "SPIFFE_HELPER_CONFIG"
-const spiffeHelperConfigMountPath = "/etc/spiffe-helper"
-const spiffeHelperConfigFileName = "config.conf"
-const spiffeHelperInitContainerName = "inject-spiffe-helper-config"
+// Debug UI constants
+const (
+	debugUIContainerName = "spiffe-enable-ui"
+	debugUIPort          = 8000
+)
 
-const spiffeEnableCertVolumeName = "spiffe-enable-certs"
-const spiffeEnableCertDirectory = "/spiffe-enable"
-
-var envoyImage = "envoyproxy/envoy:v1.33-latest"
-
-const debugUIContainerName = "spiffe-enable-ui"
-const debugUIPort = 8000
-
-var spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
-var initHelperImage = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-init:v0.1.0-alpha"
-var debugUIImage = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-ui:v0.1.0-alpha"
+// Container images
+var (
+	envoyImage        = "envoyproxy/envoy:v1.33-latest"
+	spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
+	initHelperImage   = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-init:v0.1.0-alpha"
+	debugUIImage      = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-ui:v0.1.0-alpha"
+)
 
 var spiffeHelperConfigTemplate = `
 agent_address = "{{ .AgentAddress }}"
