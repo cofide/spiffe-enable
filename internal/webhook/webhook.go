@@ -19,6 +19,8 @@ import (
 
 const enabledAnnotation = "spiffe.cofide.io/enabled"
 const modeAnnotation = "spiffe.cofide.io/mode"
+const debugAnnotation = "spiffe.cofide.io/debug"
+
 const modeAnnotationHelper = "helper"
 const modeAnnotationProxy = "proxy"
 
@@ -53,8 +55,12 @@ const spiffeEnableCertVolumeName = "spiffe-enable-certs"
 const spiffeEnableCertDirectory = "/spiffe-enable"
 
 var envoyImage = "envoyproxy/envoy:v1.33-latest"
+
+const debugUIContainerName = "spiffe-enable-ui"
+
 var spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
 var initHelperImage = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-init:v0.1.0-alpha"
+var debugUIImage = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-ui:v0.1.0-alpha"
 
 var spiffeHelperConfigTemplate = `
 agent_address = "{{ .AgentAddress }}"
@@ -281,6 +287,26 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		Value: spiffeWLSocket,
 	}
 
+	logger.Info("Observed pod annotations", "annotations", pod.Annotations)
+
+	// Check for a debug annotation
+	debugAnnotationValue, debugAnnotationExists := pod.Annotations[debugAnnotation]
+
+	if debugAnnotationExists && debugAnnotationValue == "true" {
+		if !containerExists(pod.Spec.Containers, debugUIContainerName) {
+			logger.Info("Adding SPIFFE Enable debug UI container", "containerName", debugUIContainerName)
+			debugSidecar := corev1.Container{
+				Name:            debugUIContainerName,
+				Image:           debugUIImage,
+				ImagePullPolicy: corev1.PullAlways,
+				Ports: []corev1.ContainerPort{
+					{ContainerPort: 8080},
+				},
+			}
+			pod.Spec.Containers = append(pod.Spec.Containers, debugSidecar)
+		}
+	}
+
 	// Process each (standard) container in the pod
 	for i := range pod.Spec.Containers {
 		container := &pod.Spec.Containers[i]
@@ -289,8 +315,6 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		// Add SPIFFE socket environment variable
 		ensureEnvVar(container, spiffeSocketEnvVar)
 	}
-
-	logger.Info("Observed pod annotations", "annotations", pod.Annotations)
 
 	// Check for a mode annotation and process based on the value
 	modeAnnotationValue, modeAnnotationExists := pod.Annotations[modeAnnotation]
