@@ -48,16 +48,6 @@ const (
 	envoyProxyPort  = 10000
 )
 
-// Envoy
-const (
-	envoySidecarContainerName    = "envoy-sidecar"
-	envoyConfigVolumeName        = "envoy-config"
-	envoyConfigMountPath         = "/etc/envoy"
-	envoyConfigFileName          = "envoy.yaml"
-	envoyConfigContentEnvVar     = "ENVOY_CONFIG_CONTENT"
-	envoyConfigInitContainerName = "inject-envoy-config"
-)
-
 // SPIFFE Enable
 const (
 	spiffeEnableCertVolumeName = "spiffe-enable-certs"
@@ -72,7 +62,6 @@ const (
 
 // Container images
 var (
-	envoyImage        = "envoyproxy/envoy:v1.33-latest"
 	spiffeHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
 	initHelperImage   = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-init:v0.1.0-alpha"
 	debugUIImage      = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-ui:v0.1.0-alpha"
@@ -266,35 +255,36 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 				}
 
 				// Add an emptyDir volume for the Envoy proxy configuration if it doesn't already exist
-				if !volumeExists(pod, envoyConfigVolumeName) {
-					logger.Info("Adding Envoy config volume", "volumeName", envoyConfigVolumeName)
+				if !volumeExists(pod, proxy.EnvoyConfigVolumeName) {
+					logger.Info("Adding Envoy config volume", "volumeName", proxy.EnvoyConfigVolumeName)
 					pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-						Name:         envoyConfigVolumeName,
+						Name:         proxy.EnvoyConfigVolumeName,
 						VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 					})
 				}
 
+				configFilePath := filepath.Join(proxy.EnvoyConfigMountPath, proxy.EnvoyConfigFileName)
+
 				// Add an init container to write out the Envoy config to a file
-				if !initContainerExists(pod, envoyConfigInitContainerName) {
-					logger.Info("Adding init container to inject Envoy config", "initContainerName", envoyConfigInitContainerName)
-					configFilePath := filepath.Join(envoyConfigMountPath, envoyConfigFileName)
+				if !initContainerExists(pod, proxy.EnvoyConfigInitContainerName) {
+					logger.Info("Adding init container to inject Envoy config", "initContainerName", proxy.EnvoyConfigInitContainerName)
 
 					// This command writes out an Envoy config file based on the contents of the environment variable
 					envoyConfigCmd := fmt.Sprintf("mkdir -p %s && printf '%%s' \"${%s}\" > %s",
 						filepath.Dir(configFilePath),
-						envoyConfigContentEnvVar,
+						proxy.EnvoyConfigContentEnvVar,
 						configFilePath)
 
 					cmd := fmt.Sprintf("set -e; %s && %s", envoyConfigCmd, envoyConfig.InitScript)
 
 					initContainer := corev1.Container{
-						Name:            envoyConfigInitContainerName,
+						Name:            proxy.EnvoyConfigInitContainerName,
 						Image:           initHelperImage,
 						ImagePullPolicy: corev1.PullIfNotPresent,
 						Command:         []string{"/bin/sh", "-c"},
 						Args:            []string{cmd},
-						Env:             []corev1.EnvVar{{Name: envoyConfigContentEnvVar, Value: string(envoyConfigJSON)}},
-						VolumeMounts:    []corev1.VolumeMount{{Name: envoyConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
+						Env:             []corev1.EnvVar{{Name: proxy.EnvoyConfigContentEnvVar, Value: string(envoyConfigJSON)}},
+						VolumeMounts:    []corev1.VolumeMount{{Name: proxy.EnvoyConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
 						SecurityContext: &corev1.SecurityContext{
 							Capabilities: &corev1.Capabilities{
 								Add: []corev1.Capability{"NET_ADMIN"}, // # NET_ADMIN is required to apply nftables rules
@@ -306,15 +296,15 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 				}
 
 				// Add the Envoy container as a sidecar
-				if !containerExists(pod.Spec.Containers, envoySidecarContainerName) {
-					logger.Info("Adding Envoy proxy sidecar container", "containerName", envoySidecarContainerName)
+				if !containerExists(pod.Spec.Containers, proxy.EnvoySidecarContainerName) {
+					logger.Info("Adding Envoy proxy sidecar container", "containerName", proxy.EnvoySidecarContainerName)
 					envoySidecar := corev1.Container{
-						Name:            envoySidecarContainerName,
-						Image:           envoyImage,
+						Name:            proxy.EnvoySidecarContainerName,
+						Image:           proxy.EnvoyImage,
 						ImagePullPolicy: corev1.PullIfNotPresent,
 						Command:         []string{"envoy"},
-						Args:            []string{"-c", "/etc/envoy/envoy.yaml"},
-						VolumeMounts:    []corev1.VolumeMount{{Name: envoyConfigVolumeName, MountPath: envoyConfigMountPath}},
+						Args:            []string{"-c", configFilePath},
+						VolumeMounts:    []corev1.VolumeMount{{Name: proxy.EnvoyConfigVolumeName, MountPath: proxy.EnvoyConfigMountPath}},
 						SecurityContext: &corev1.SecurityContext{
 							RunAsUser:    ptr.To(int64(101)), // # Run as non-root user
 							RunAsGroup:   ptr.To(int64(101)), // # Run as non-root group

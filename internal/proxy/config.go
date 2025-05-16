@@ -6,6 +6,20 @@ import (
 	"html/template"
 )
 
+// Envoy-specific constants
+var (
+	EnvoyImage = "envoyproxy/envoy:v1.33-latest"
+)
+
+const (
+	EnvoySidecarContainerName    = "envoy-sidecar"
+	EnvoyConfigVolumeName        = "envoy-config"
+	EnvoyConfigMountPath         = "/etc/envoy"
+	EnvoyConfigFileName          = "envoy.yaml"
+	EnvoyConfigContentEnvVar     = "ENVOY_CONFIG_CONTENT"
+	EnvoyConfigInitContainerName = "inject-envoy-config"
+)
+
 const nftablesSetupScript = `
 if ! command -v nft &> /dev/null; then
     echo "nftables (nft) is not installed"
