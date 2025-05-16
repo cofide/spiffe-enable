@@ -1,15 +1,14 @@
 package webhook
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
-	"text/template"
 
+	"github.com/cofide/spiffe-enable/internal/helper"
 	"github.com/cofide/spiffe-enable/internal/proxy"
 	"github.com/go-logr/logr"
 
@@ -59,16 +58,6 @@ const (
 	envoyConfigInitContainerName = "inject-envoy-config"
 )
 
-// SPIFFE Helper
-const (
-	spiffeHelperConfigVolumeName     = "spiffe-helper-config"
-	spiffeHelperSidecarContainerName = "spiffe-helper"
-	spiffeHelperConfigContentEnvVar  = "SPIFFE_HELPER_CONFIG"
-	spiffeHelperConfigMountPath      = "/etc/spiffe-helper"
-	spiffeHelperConfigFileName       = "config.conf"
-	spiffeHelperInitContainerName    = "inject-spiffe-helper-config"
-)
-
 // SPIFFE Enable
 const (
 	spiffeEnableCertVolumeName = "spiffe-enable-certs"
@@ -89,35 +78,10 @@ var (
 	debugUIImage      = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-ui:v0.1.0-alpha"
 )
 
-var spiffeHelperConfigTemplate = `
-agent_address = "{{ .AgentAddress }}"
-include_federated_domains = true
-{{ if .IncludeIntermediateBundle }}
-add_intermediates_to_bundle = true
-{{ end }}
-cmd = ""
-cmd_args = ""
-cert_dir = "{{ .CertPath }}"
-renew_signal = ""
-svid_file_name = "tls.crt"
-svid_key_file_name = "tls.key"
-svid_bundle_file_name = "ca.pem"
-jwt_bundle_file_name = "cert.jwt"
-jwt_svids = [{jwt_audience="aud", jwt_svid_file_name="jwt_svid.token"}]
-daemon_mode = true
-`
-
-type spiffeHelperTemplateData struct {
-	AgentAddress              string
-	CertPath                  string
-	IncludeIntermediateBundle bool
-}
-
 type spiffeEnableWebhook struct {
-	Client                 client.Client
-	decoder                admission.Decoder
-	Log                    logr.Logger
-	spiffeHelperConfigTmpl *template.Template
+	Client  client.Client
+	decoder admission.Decoder
+	Log     logr.Logger
 }
 
 // Helper function to check if a volume already exists
@@ -170,17 +134,10 @@ func initContainerExists(pod *corev1.Pod, containerName string) bool {
 }
 
 func NewSpiffeEnableWebhook(client client.Client, log logr.Logger, decoder admission.Decoder) (*spiffeEnableWebhook, error) {
-	spiffeHelperTmpl, err := template.New("spiffeHelperConfig").Parse(spiffeHelperConfigTemplate)
-	if err != nil {
-		log.Error(err, "Failed to parse spiffe-helper config template")
-		return nil, fmt.Errorf("failed to parse spiffe-helper config template: %w", err)
-	}
-
 	return &spiffeEnableWebhook{
-		Client:                 client,
-		Log:                    log,
-		decoder:                decoder,
-		spiffeHelperConfigTmpl: spiffeHelperTmpl,
+		Client:  client,
+		Log:     log,
+		decoder: decoder,
 	}, nil
 }
 
@@ -375,10 +332,10 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 				logger.Info("Applying 'helper' mode mutations")
 
 				// Add an emptyDir volume for the SPIFFE Helper configuration if it doesn't already exist
-				if !volumeExists(pod, spiffeHelperConfigVolumeName) {
-					logger.Info("Adding SPIFFE helper config volume", "volumeName", spiffeHelperConfigVolumeName)
+				if !volumeExists(pod, helper.SPIFFEHelperConfigVolumeName) {
+					logger.Info("Adding SPIFFE helper config volume", "volumeName", helper.SPIFFEHelperConfigVolumeName)
 					pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-						Name:         spiffeHelperConfigVolumeName,
+						Name:         helper.SPIFFEHelperConfigVolumeName,
 						VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 					})
 				}
@@ -398,52 +355,52 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 					incIntermediateBundle = true
 				}
 
-				templateData := spiffeHelperTemplateData{
+				// Generate the spiffe-helper configuration
+				configParams := helper.SPIFFEHelperConfigParams{
 					AgentAddress:              spiffeWLSocketPath,
 					CertPath:                  spiffeEnableCertDirectory,
 					IncludeIntermediateBundle: incIntermediateBundle,
 				}
 
-				var configBuf bytes.Buffer
-				if err := a.spiffeHelperConfigTmpl.Execute(&configBuf, templateData); err != nil {
-					logger.Error(err, "Failed to execute spiffe-helper config template")
-					return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to template helper config: %w", err))
+				spiffeHelperConfig, err := helper.NewSPIFFEHelperConfig(configParams)
+				if err != nil {
+					logger.Error(err, "Error creating spiffe-helper config")
+					return admission.Errored(http.StatusInternalServerError, fmt.Errorf("error creating spiffe-helper config: %w", err))
 				}
-				spiffeHelperConfig := configBuf.String()
 
-				if !initContainerExists(pod, spiffeHelperInitContainerName) {
-					logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", spiffeHelperInitContainerName)
-					configFilePath := filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)
+				if !initContainerExists(pod, helper.SPIFFEHelperInitContainerName) {
+					logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", helper.SPIFFEHelperInitContainerName)
+					configFilePath := filepath.Join(helper.SPIFFEHelperConfigMountPath, helper.SPIFFEHelperConfigFileName)
 					writeCmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s && echo -e \"\\n=== SPIFFE Helper Config ===\" && cat %s && echo -e \"\\n===========================\"",
 						filepath.Dir(configFilePath),
-						spiffeHelperConfigContentEnvVar,
+						helper.SPIFFEHelperConfigContentEnvVar,
 						configFilePath,
 						configFilePath)
 
 					initContainer := corev1.Container{
-						Name:            spiffeHelperInitContainerName,
+						Name:            helper.SPIFFEHelperInitContainerName,
 						Image:           initHelperImage,
 						ImagePullPolicy: corev1.PullIfNotPresent,
 						Command:         []string{"/bin/sh", "-c"},
 						Args:            []string{writeCmd},
-						Env:             []corev1.EnvVar{{Name: spiffeHelperConfigContentEnvVar, Value: spiffeHelperConfig}},
+						Env:             []corev1.EnvVar{{Name: helper.SPIFFEHelperConfigContentEnvVar, Value: spiffeHelperConfig.Cfg}},
 						VolumeMounts: []corev1.VolumeMount{
-							{Name: spiffeHelperConfigVolumeName, MountPath: filepath.Dir(configFilePath)},
+							{Name: helper.SPIFFEHelperConfigVolumeName, MountPath: filepath.Dir(configFilePath)},
 							{Name: spiffeEnableCertVolumeName, MountPath: spiffeEnableCertDirectory},
 						},
 					}
 					pod.Spec.InitContainers = append([]corev1.Container{initContainer}, pod.Spec.InitContainers...)
 				}
 
-				if !containerExists(pod.Spec.Containers, spiffeHelperSidecarContainerName) {
-					logger.Info("Adding SPIFFE Helper sidecar container", "containerName", spiffeHelperSidecarContainerName)
+				if !containerExists(pod.Spec.Containers, helper.SPIFFEHelperSidecarContainerName) {
+					logger.Info("Adding SPIFFE Helper sidecar container", "containerName", helper.SPIFFEHelperSidecarContainerName)
 					helperSidecar := corev1.Container{
-						Name:            spiffeHelperSidecarContainerName,
+						Name:            helper.SPIFFEHelperSidecarContainerName,
 						Image:           spiffeHelperImage,
 						ImagePullPolicy: corev1.PullIfNotPresent,
-						Args:            []string{"-config", filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)},
+						Args:            []string{"-config", filepath.Join(helper.SPIFFEHelperConfigMountPath, helper.SPIFFEHelperConfigFileName)},
 						VolumeMounts: []corev1.VolumeMount{
-							{Name: spiffeHelperConfigVolumeName, MountPath: spiffeHelperConfigMountPath, ReadOnly: true},
+							{Name: helper.SPIFFEHelperConfigVolumeName, MountPath: helper.SPIFFEHelperConfigMountPath, ReadOnly: true},
 							{Name: spiffeEnableCertVolumeName, MountPath: spiffeEnableCertDirectory},
 							spiffeVolumeMount,
 						},
