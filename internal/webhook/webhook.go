@@ -10,6 +10,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cofide/spiffe-enable/internal/proxy"
 	"github.com/go-logr/logr"
 
 	corev1 "k8s.io/api/core/v1"
@@ -87,103 +88,11 @@ type spiffeHelperTemplateData struct {
 	IncludeIntermediateBundle bool
 }
 
-var envoyConfigTemplate = `
-node:
-  id: node
-  cluster: cluster
-
-admin:
-  address:
-    socket_address: { address: 0.0.0.0, port_value: 9901 }
-
-# Dynamic resource configuration
-dynamic_resources:
-  # Configure ADS (Aggregated Discovery Service)
-  ads_config:
-    api_type: GRPC
-    transport_api_version: V3 # Use the v3 xDS API
-    grpc_services:
-      - envoy_grpc:
-          cluster_name: xds_cluster
-    set_node_on_first_message_only: true # Optimization for ADS
-
-  # Configure CDS (Cluster Discovery Service) to use ADS
-  cds_config:
-    resource_api_version: V3
-    ads: {} 
-
-  lds_config:
-    resource_api_version: V3
-    ads: {} 
-
-static_resources:
-  clusters:
-    - name: xds_cluster 
-      type: LOGICAL_DNS 
-      connect_timeout: 5s
-      # xDS uses gRPC, which requires HTTP/2
-      typed_extension_protocol_options:
-        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
-          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
-          explicit_http_config:
-            http2_protocol_options: {} # Enable HTTP/2
-
-      load_assignment:
-        cluster_name: xds_cluster
-        endpoints:
-          - lb_endpoints:
-              - endpoint:
-                  address:
-                    socket_address:
-                      address: {{ .AgentXDSService }}
-                      port_value: {{ .AgentXDSPort }}
-`
-
-var nftablesSetupScript = `
-if ! command -v nft &> /dev/null; then
-    echo "nftables (nft) is not installed"
-    exit 1
-fi
-
-# These nftables rules intercept DNS requests (UDP+TCP)
-# and redirect to a DNS proxy provided by Envoy
-cat <<EOF > /tmp/dns_redirect.nft
-table inet envoy_dns_interception {
-    chain redirect_dns_output {
-        type nat hook output priority dstnat; policy accept;
-
-        # Rule to accept DNS from skuid 101 (Envoy) - UDP
-        meta skuid == 101 udp dport 53 counter accept comment "Accept Envoy UDP DNS"
-
-        # Rule to accept DNS from skuid 101 (Envoy) - TCP
-        meta skuid == 101 tcp dport 53 counter accept comment "Accept Envoy TCP DNS"
-
-        # Rules to redirect DNS
-        meta skuid != 101 udp dport 53 counter redirect to :15053 comment "Webhook: UDP DNS to Envoy"
-        meta skuid != 101 tcp dport 53 counter redirect to :15053 comment "Webhook: TCP DNS to Envoy"
-    }
-}
-EOF
-
-# Apply the nftables rules from the created file
-nft -f /tmp/dns_redirect.nft
-echo "nftables DNS redirection rules applied."
-
-echo "Applied rules:"
-nft list table inet envoy_dns_interception
-`
-
-type envoyTemplateData struct {
-	AgentXDSPort    int
-	AgentXDSService string
-}
-
 type spiffeEnableWebhook struct {
 	Client                 client.Client
 	decoder                admission.Decoder
 	Log                    logr.Logger
 	spiffeHelperConfigTmpl *template.Template
-	envoyConfigTmpl        *template.Template
 }
 
 // Helper function to check if a volume already exists
@@ -242,18 +151,11 @@ func NewSpiffeEnableWebhook(client client.Client, log logr.Logger, decoder admis
 		return nil, fmt.Errorf("failed to parse spiffe-helper config template: %w", err)
 	}
 
-	envoyTmpl, err := template.New("envoyConfig").Parse(envoyConfigTemplate)
-	if err != nil {
-		log.Error(err, "Failed to parse Envoy config template")
-		return nil, fmt.Errorf("failed to parse Envoy config template: %w", err)
-	}
-
 	return &spiffeEnableWebhook{
 		Client:                 client,
 		Log:                    log,
 		decoder:                decoder,
 		spiffeHelperConfigTmpl: spiffeHelperTmpl,
-		envoyConfigTmpl:        envoyTmpl,
 	}, nil
 }
 
@@ -362,6 +264,27 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		for _, mode := range toInject {
 			switch mode {
 			case injectAnnotationProxy:
+				// Generate the Envoy configuration
+				configParams := proxy.EnvoyConfigParams{
+					NodeID:          "node",
+					ClusterName:     "cluster",
+					AdminPort:       9901,
+					AgentXDSService: agentXDSService,
+					AgentXDSPort:    agentXDSPort,
+				}
+
+				envoyConfig, err := proxy.NewEnvoyConfig(configParams)
+				if err != nil {
+					logger.Error(err, "Error creating proxy config")
+					return admission.Errored(http.StatusInternalServerError, fmt.Errorf("error creating proxy config: %w", err))
+				}
+
+				envoyConfigJSON, err := json.MarshalIndent(envoyConfig, "", "  ")
+				if err != nil {
+					logger.Error(err, "Error marshalling proxy config to JSON")
+					return admission.Errored(http.StatusInternalServerError, fmt.Errorf("error marshalling proxy config to JSON: %w", err))
+				}
+
 				// Add an emptyDir volume for the Envoy proxy configuration if it doesn't already exist
 				if !volumeExists(pod, envoyConfigVolumeName) {
 					logger.Info("Adding Envoy config volume", "volumeName", envoyConfigVolumeName)
@@ -370,18 +293,6 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 						VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 					})
 				}
-
-				templateData := envoyTemplateData{
-					AgentXDSPort:    agentXDSPort,
-					AgentXDSService: agentXDSService,
-				}
-
-				var configBuf bytes.Buffer
-				if err := a.envoyConfigTmpl.Execute(&configBuf, templateData); err != nil {
-					logger.Error(err, "Failed to execute Envoy config template")
-					return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to template Envoy config: %w", err))
-				}
-				envoyConfig := configBuf.String()
 
 				// Add an init container to write out the Envoy config to a file
 				if !initContainerExists(pod, envoyConfigInitContainerName) {
@@ -394,7 +305,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 						envoyConfigContentEnvVar,
 						configFilePath)
 
-					cmd := fmt.Sprintf("set -e; %s && %s", envoyConfigCmd, nftablesSetupScript)
+					cmd := fmt.Sprintf("set -e; %s && %s", envoyConfigCmd, envoyConfig.InitScript)
 
 					initContainer := corev1.Container{
 						Name:            envoyConfigInitContainerName,
@@ -402,13 +313,13 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 						ImagePullPolicy: corev1.PullIfNotPresent,
 						Command:         []string{"/bin/sh", "-c"},
 						Args:            []string{cmd},
-						Env:             []corev1.EnvVar{{Name: envoyConfigContentEnvVar, Value: envoyConfig}},
+						Env:             []corev1.EnvVar{{Name: envoyConfigContentEnvVar, Value: string(envoyConfigJSON)}},
 						VolumeMounts:    []corev1.VolumeMount{{Name: envoyConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
 						SecurityContext: &corev1.SecurityContext{
 							Capabilities: &corev1.Capabilities{
-								Add: []corev1.Capability{"NET_ADMIN"},
+								Add: []corev1.Capability{"NET_ADMIN"}, // # NET_ADMIN is required to apply nftables rules
 							},
-							RunAsUser: ptr.To(int64(0)), // # Run as root to apply nftables rules
+							RunAsUser: ptr.To(int64(0)), // # Run as root in order to apply nftables rules
 						},
 					}
 					pod.Spec.InitContainers = append([]corev1.Container{initContainer}, pod.Spec.InitContainers...)
