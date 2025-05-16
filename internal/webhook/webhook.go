@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/go-logr/logr"
@@ -18,11 +19,11 @@ import (
 )
 
 const enabledAnnotation = "spiffe.cofide.io/enabled"
-const modeAnnotation = "spiffe.cofide.io/mode"
+const injectAnnotation = "spiffe.cofide.io/inject"
 const debugAnnotation = "spiffe.cofide.io/debug"
 
-const modeAnnotationHelper = "helper"
-const modeAnnotationProxy = "proxy"
+const injectAnnotationHelper = "helper"
+const injectAnnotationProxy = "proxy"
 
 const spiffeHelperIncIntermediateAnnotation = "spiffe.cofide.io/spiffe-helper-include-intermediate-bundle"
 
@@ -90,6 +91,10 @@ var envoyConfigTemplate = `
 node:
   id: node
   cluster: cluster
+
+admin:
+  address:
+    socket_address: { address: 0.0.0.0, port_value: 9901 }
 
 # Dynamic resource configuration
 dynamic_resources:
@@ -259,8 +264,8 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 
 	logger := a.Log.WithValues("podNamespace", pod.Namespace, "podName", pod.Name, "request", req.UID)
 
-	injectAnnotationValue, injectAnnotationExists := pod.Annotations[enabledAnnotation]
-	spiffeInjectionEnabled := injectAnnotationExists && injectAnnotationValue == "true"
+	enableAnnotationValue, enableAnnotationExists := pod.Annotations[enabledAnnotation]
+	spiffeInjectionEnabled := enableAnnotationExists && enableAnnotationValue == "true"
 
 	if !spiffeInjectionEnabled {
 		logger.Info("Skipping all injections, annotation not set or disabled", "annotation", enabledAnnotation)
@@ -316,178 +321,199 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		ensureEnvVar(container, spiffeSocketEnvVar)
 	}
 
-	// Check for a mode annotation and process based on the value
-	modeAnnotationValue, modeAnnotationExists := pod.Annotations[modeAnnotation]
+	// Check for an inject annotation and process based on the value
+	injectAnnotationValue, injectAnnotationExists := pod.Annotations[injectAnnotation]
 
-	if modeAnnotationExists {
-		if modeAnnotationValue != modeAnnotationHelper && modeAnnotationValue != modeAnnotationProxy {
+	allowedModes := map[string]bool{
+		injectAnnotationHelper: true,
+		injectAnnotationProxy:  true,
+	}
+
+	var invalidModes []string
+
+	if injectAnnotationExists {
+		toInject := strings.Split(injectAnnotationValue, ",")
+
+		// First check that the desired injections are permitted
+		for _, mode := range toInject {
+			trimmedMode := strings.TrimSpace(mode)
+			if trimmedMode == "" {
+				continue
+			}
+
+			if _, isValid := allowedModes[trimmedMode]; !isValid {
+				invalidModes = append(invalidModes, trimmedMode)
+			}
+		}
+
+		if len(invalidModes) > 0 {
 			err := fmt.Errorf(
-				"invalid value %q for annotation %q; allowed values are %q or %q",
-				modeAnnotationValue,
-				modeAnnotation,
-				modeAnnotationHelper,
-				modeAnnotationProxy,
+				"invalid mode(s) found in injection list: %v. Allowed modes are: %v",
+				strings.Join(invalidModes, ", "),
+				getKeys(allowedModes),
 			)
-			logger.Error(err, "Pod rejected due to invalid annotation value", "annotationKey", modeAnnotation, "providedValue", modeAnnotationValue)
+			logger.Error(err, "Pod rejected due to invalid injection modes", "providedModes", injectAnnotationValue, "invalidFound", invalidModes)
 			return admission.Denied(err.Error())
 		}
 
-		switch modeAnnotationValue {
-		// Inject an Envoy proxy sidecar container
-		case modeAnnotationProxy:
-			// Add an emptyDir volume for the Envoyt proxy configiuration if it doesn't already exist
-			if !volumeExists(pod, envoyConfigVolumeName) {
-				logger.Info("Adding Envoy config volume", "volumeName", envoyConfigVolumeName)
-				pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-					Name:         envoyConfigVolumeName,
-					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-				})
-			}
+		// Now iterate the injections and apply
+		for _, mode := range toInject {
+			switch mode {
+			case injectAnnotationProxy:
+				// Add an emptyDir volume for the Envoyt proxy configiuration if it doesn't already exist
+				if !volumeExists(pod, envoyConfigVolumeName) {
+					logger.Info("Adding Envoy config volume", "volumeName", envoyConfigVolumeName)
+					pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+						Name:         envoyConfigVolumeName,
+						VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+					})
+				}
 
-			templateData := envoyTemplateData{
-				AgentXDSPort:    agentXDSPort,
-				AgentXDSService: agentXDSService,
-			}
+				templateData := envoyTemplateData{
+					AgentXDSPort:    agentXDSPort,
+					AgentXDSService: agentXDSService,
+				}
 
-			var configBuf bytes.Buffer
-			if err := a.envoyConfigTmpl.Execute(&configBuf, templateData); err != nil {
-				logger.Error(err, "Failed to execute Envoy config template")
-				return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to template Envoy config: %w", err))
-			}
-			envoyConfig := configBuf.String()
+				var configBuf bytes.Buffer
+				if err := a.envoyConfigTmpl.Execute(&configBuf, templateData); err != nil {
+					logger.Error(err, "Failed to execute Envoy config template")
+					return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to template Envoy config: %w", err))
+				}
+				envoyConfig := configBuf.String()
 
-			// Add an init container to write out the Envoy config to a file
-			if !initContainerExists(pod, envoyConfigInitContainerName) {
-				logger.Info("Adding init container to inject Envoy config", "initContainerName", envoyConfigInitContainerName)
-				configFilePath := filepath.Join(envoyConfigMountPath, envoyConfigFileName)
+				// Add an init container to write out the Envoy config to a file
+				if !initContainerExists(pod, envoyConfigInitContainerName) {
+					logger.Info("Adding init container to inject Envoy config", "initContainerName", envoyConfigInitContainerName)
+					configFilePath := filepath.Join(envoyConfigMountPath, envoyConfigFileName)
 
-				// This command writes out an Envoy config file based on the contents of the environment variable
-				envoyConfigCmd := fmt.Sprintf("mkdir -p %s && printf '%%s' \"${%s}\" > %s",
-					filepath.Dir(configFilePath),
-					envoyConfigContentEnvVar,
-					configFilePath)
+					// This command writes out an Envoy config file based on the contents of the environment variable
+					envoyConfigCmd := fmt.Sprintf("mkdir -p %s && printf '%%s' \"${%s}\" > %s",
+						filepath.Dir(configFilePath),
+						envoyConfigContentEnvVar,
+						configFilePath)
 
-				cmd := fmt.Sprintf("set -e; %s && %s", envoyConfigCmd, nftablesSetupScript)
+					cmd := fmt.Sprintf("set -e; %s && %s", envoyConfigCmd, nftablesSetupScript)
 
-				initContainer := corev1.Container{
-					Name:            envoyConfigInitContainerName,
-					Image:           initHelperImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         []string{"/bin/sh", "-c"},
-					Args:            []string{cmd},
-					Env:             []corev1.EnvVar{{Name: envoyConfigContentEnvVar, Value: envoyConfig}},
-					VolumeMounts:    []corev1.VolumeMount{{Name: envoyConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
-					SecurityContext: &corev1.SecurityContext{
-						Capabilities: &corev1.Capabilities{
-							Add: []corev1.Capability{"NET_ADMIN"},
+					initContainer := corev1.Container{
+						Name:            envoyConfigInitContainerName,
+						Image:           initHelperImage,
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						Command:         []string{"/bin/sh", "-c"},
+						Args:            []string{cmd},
+						Env:             []corev1.EnvVar{{Name: envoyConfigContentEnvVar, Value: envoyConfig}},
+						VolumeMounts:    []corev1.VolumeMount{{Name: envoyConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
+						SecurityContext: &corev1.SecurityContext{
+							Capabilities: &corev1.Capabilities{
+								Add: []corev1.Capability{"NET_ADMIN"},
+							},
+							RunAsUser: ptr.To(int64(0)), // # Run as root to apply nftables rules
 						},
-						RunAsUser: ptr.To(int64(0)), // # Run as root to apply nftables rules
-					},
+					}
+					pod.Spec.InitContainers = append([]corev1.Container{initContainer}, pod.Spec.InitContainers...)
 				}
-				pod.Spec.InitContainers = append([]corev1.Container{initContainer}, pod.Spec.InitContainers...)
-			}
 
-			// Add the Envoy container as a sidecar
-			if !containerExists(pod.Spec.Containers, envoySidecarContainerName) {
-				logger.Info("Adding Envoy proxy sidecar container", "containerName", envoySidecarContainerName)
-				envoySidecar := corev1.Container{
-					Name:            envoySidecarContainerName,
-					Image:           envoyImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         []string{"envoy"},
-					Args:            []string{"-c", "/etc/envoy/envoy.yaml"},
-					VolumeMounts:    []corev1.VolumeMount{{Name: envoyConfigVolumeName, MountPath: envoyConfigMountPath}},
-					SecurityContext: &corev1.SecurityContext{
-						RunAsUser:    ptr.To(int64(101)), // # Run as non-root user
-						RunAsGroup:   ptr.To(int64(101)), // # Run as non-root group
-						RunAsNonRoot: ptr.To(true),
-					},
-					Ports: []corev1.ContainerPort{
-						{ContainerPort: envoyProxyPort},
-					},
+				// Add the Envoy container as a sidecar
+				if !containerExists(pod.Spec.Containers, envoySidecarContainerName) {
+					logger.Info("Adding Envoy proxy sidecar container", "containerName", envoySidecarContainerName)
+					envoySidecar := corev1.Container{
+						Name:            envoySidecarContainerName,
+						Image:           envoyImage,
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						Command:         []string{"envoy"},
+						Args:            []string{"-c", "/etc/envoy/envoy.yaml"},
+						VolumeMounts:    []corev1.VolumeMount{{Name: envoyConfigVolumeName, MountPath: envoyConfigMountPath}},
+						SecurityContext: &corev1.SecurityContext{
+							RunAsUser:    ptr.To(int64(101)), // # Run as non-root user
+							RunAsGroup:   ptr.To(int64(101)), // # Run as non-root group
+							RunAsNonRoot: ptr.To(true),
+						},
+						Ports: []corev1.ContainerPort{
+							{ContainerPort: envoyProxyPort},
+						},
+					}
+					pod.Spec.Containers = append(pod.Spec.Containers, envoySidecar)
 				}
-				pod.Spec.Containers = append(pod.Spec.Containers, envoySidecar)
-			}
 
-		// Inject a spiffe-helper sidecar container
-		case modeAnnotationHelper:
-			logger.Info("Applying 'helper' mode mutations")
+			case injectAnnotationHelper:
+				// Inject a spiffe-helper sidecar container
+				logger.Info("Applying 'helper' mode mutations")
 
-			// Add an emptyDir volume for the SPIFFE Helper configuration if it doesn't already exist
-			if !volumeExists(pod, spiffeHelperConfigVolumeName) {
-				logger.Info("Adding SPIFFE helper config volume", "volumeName", spiffeHelperConfigVolumeName)
-				pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-					Name:         spiffeHelperConfigVolumeName,
-					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-				})
-			}
-
-			// Add an emptyDir volume for the certs managed by SPIFFE Helper
-			if !volumeExists(pod, spiffeEnableCertVolumeName) {
-				logger.Info("Adding SPIFFE helper certs volume", "volumeName", spiffeEnableCertVolumeName)
-				pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-					Name:         spiffeEnableCertVolumeName,
-					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-				})
-			}
-
-			incIntermediateBundle := false
-			incIntermediateValue, incIntermediateExists := pod.Annotations[spiffeHelperIncIntermediateAnnotation]
-			if incIntermediateExists && incIntermediateValue == "true" {
-				incIntermediateBundle = true
-			}
-
-			templateData := spiffeHelperTemplateData{
-				AgentAddress:              spiffeWLSocketPath,
-				CertPath:                  spiffeEnableCertDirectory,
-				IncludeIntermediateBundle: incIntermediateBundle,
-			}
-
-			var configBuf bytes.Buffer
-			if err := a.spiffeHelperConfigTmpl.Execute(&configBuf, templateData); err != nil {
-				logger.Error(err, "Failed to execute spiffe-helper config template")
-				return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to template helper config: %w", err))
-			}
-			spiffeHelperConfig := configBuf.String()
-
-			if !initContainerExists(pod, spiffeHelperInitContainerName) {
-				logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", spiffeHelperInitContainerName)
-				configFilePath := filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)
-				writeCmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s && echo -e \"\\n=== SPIFFE Helper Config ===\" && cat %s && echo -e \"\\n===========================\"",
-					filepath.Dir(configFilePath),
-					spiffeHelperConfigContentEnvVar,
-					configFilePath,
-					configFilePath)
-
-				initContainer := corev1.Container{
-					Name:            spiffeHelperInitContainerName,
-					Image:           initHelperImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					Command:         []string{"/bin/sh", "-c"},
-					Args:            []string{writeCmd},
-					Env:             []corev1.EnvVar{{Name: spiffeHelperConfigContentEnvVar, Value: spiffeHelperConfig}},
-					VolumeMounts: []corev1.VolumeMount{
-						{Name: spiffeHelperConfigVolumeName, MountPath: filepath.Dir(configFilePath)},
-						{Name: spiffeEnableCertVolumeName, MountPath: spiffeEnableCertDirectory},
-					},
+				// Add an emptyDir volume for the SPIFFE Helper configuration if it doesn't already exist
+				if !volumeExists(pod, spiffeHelperConfigVolumeName) {
+					logger.Info("Adding SPIFFE helper config volume", "volumeName", spiffeHelperConfigVolumeName)
+					pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+						Name:         spiffeHelperConfigVolumeName,
+						VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+					})
 				}
-				pod.Spec.InitContainers = append([]corev1.Container{initContainer}, pod.Spec.InitContainers...)
-			}
 
-			if !containerExists(pod.Spec.Containers, spiffeHelperSidecarContainerName) {
-				logger.Info("Adding SPIFFE Helper sidecar container", "containerName", spiffeHelperSidecarContainerName)
-				helperSidecar := corev1.Container{
-					Name:            spiffeHelperSidecarContainerName,
-					Image:           spiffeHelperImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					Args:            []string{"-config", filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)},
-					VolumeMounts: []corev1.VolumeMount{
-						{Name: spiffeHelperConfigVolumeName, MountPath: spiffeHelperConfigMountPath, ReadOnly: true},
-						{Name: spiffeEnableCertVolumeName, MountPath: spiffeEnableCertDirectory},
-						spiffeVolumeMount,
-					},
+				// Add an emptyDir volume for the certs managed by SPIFFE Helper
+				if !volumeExists(pod, spiffeEnableCertVolumeName) {
+					logger.Info("Adding SPIFFE helper certs volume", "volumeName", spiffeEnableCertVolumeName)
+					pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+						Name:         spiffeEnableCertVolumeName,
+						VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+					})
 				}
-				pod.Spec.Containers = append(pod.Spec.Containers, helperSidecar)
+
+				incIntermediateBundle := false
+				incIntermediateValue, incIntermediateExists := pod.Annotations[spiffeHelperIncIntermediateAnnotation]
+				if incIntermediateExists && incIntermediateValue == "true" {
+					incIntermediateBundle = true
+				}
+
+				templateData := spiffeHelperTemplateData{
+					AgentAddress:              spiffeWLSocketPath,
+					CertPath:                  spiffeEnableCertDirectory,
+					IncludeIntermediateBundle: incIntermediateBundle,
+				}
+
+				var configBuf bytes.Buffer
+				if err := a.spiffeHelperConfigTmpl.Execute(&configBuf, templateData); err != nil {
+					logger.Error(err, "Failed to execute spiffe-helper config template")
+					return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to template helper config: %w", err))
+				}
+				spiffeHelperConfig := configBuf.String()
+
+				if !initContainerExists(pod, spiffeHelperInitContainerName) {
+					logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", spiffeHelperInitContainerName)
+					configFilePath := filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)
+					writeCmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s && echo -e \"\\n=== SPIFFE Helper Config ===\" && cat %s && echo -e \"\\n===========================\"",
+						filepath.Dir(configFilePath),
+						spiffeHelperConfigContentEnvVar,
+						configFilePath,
+						configFilePath)
+
+					initContainer := corev1.Container{
+						Name:            spiffeHelperInitContainerName,
+						Image:           initHelperImage,
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						Command:         []string{"/bin/sh", "-c"},
+						Args:            []string{writeCmd},
+						Env:             []corev1.EnvVar{{Name: spiffeHelperConfigContentEnvVar, Value: spiffeHelperConfig}},
+						VolumeMounts: []corev1.VolumeMount{
+							{Name: spiffeHelperConfigVolumeName, MountPath: filepath.Dir(configFilePath)},
+							{Name: spiffeEnableCertVolumeName, MountPath: spiffeEnableCertDirectory},
+						},
+					}
+					pod.Spec.InitContainers = append([]corev1.Container{initContainer}, pod.Spec.InitContainers...)
+				}
+
+				if !containerExists(pod.Spec.Containers, spiffeHelperSidecarContainerName) {
+					logger.Info("Adding SPIFFE Helper sidecar container", "containerName", spiffeHelperSidecarContainerName)
+					helperSidecar := corev1.Container{
+						Name:            spiffeHelperSidecarContainerName,
+						Image:           spiffeHelperImage,
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						Args:            []string{"-config", filepath.Join(spiffeHelperConfigMountPath, spiffeHelperConfigFileName)},
+						VolumeMounts: []corev1.VolumeMount{
+							{Name: spiffeHelperConfigVolumeName, MountPath: spiffeHelperConfigMountPath, ReadOnly: true},
+							{Name: spiffeEnableCertVolumeName, MountPath: spiffeEnableCertDirectory},
+							spiffeVolumeMount,
+						},
+					}
+					pod.Spec.Containers = append(pod.Spec.Containers, helperSidecar)
+				}
 			}
 		}
 	}
@@ -499,6 +525,14 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 	}
 
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
+}
+
+func getKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func ensureCSIVolumeMount(container *corev1.Container, targetMount corev1.VolumeMount, logger logr.Logger) bool {
