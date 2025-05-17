@@ -82,6 +82,22 @@ func (h SPIFFEHelper) GetSidecarContainer() corev1.Container {
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		RestartPolicy:   &restartPolicyAlways,
 		Args:            []string{"-config", filepath.Join(SPIFFEHelperConfigMountPath, SPIFFEHelperConfigFileName)},
+		StartupProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/bin/sh",
+						"-c",
+						fmt.Sprintf("test -f %s", filepath.Join(constants.SPIFFEEnableCertDirectory, "tls.crt")),
+					},
+				},
+			},
+			InitialDelaySeconds: 5,  // Start probing 5 seconds after the container starts
+			PeriodSeconds:       5,  // Check every 5 seconds
+			FailureThreshold:    10, // Consider the startup failed after 10 consecutive failures (ie 10 * 5s = 50s)
+			SuccessThreshold:    1,  // How long to wait for the command to complete
+			TimeoutSeconds:      2,  // How long to wait for the command to completes
+		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      SPIFFEHelperConfigVolumeName,
