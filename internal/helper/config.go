@@ -73,10 +73,14 @@ func (h SPIFFEHelper) GetConfigVolume() corev1.Volume {
 }
 
 func (h SPIFFEHelper) GetSidecarContainer() corev1.Container {
+	// Required in order for this sidecar to be native
+	var restartPolicyAlways = corev1.ContainerRestartPolicyAlways
+
 	return corev1.Container{
 		Name:            SPIFFEHelperSidecarContainerName,
 		Image:           SPIFFEHelperImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
+		RestartPolicy:   &restartPolicyAlways,
 		Args:            []string{"-config", filepath.Join(SPIFFEHelperConfigMountPath, SPIFFEHelperConfigFileName)},
 		VolumeMounts: []corev1.VolumeMount{
 			{
