@@ -213,10 +213,13 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
 
+/*
 func AddContainer(pod *corev1.Pod, container corev1.Container, logger logr.Logger) *corev1.Pod {
 	modifiedPod := pod.DeepCopy()
+	modifiedPod.Spec.Containers = append([]corev1.Container{container}, modifiedPod.Spec.InitContainers...)
 	return modifiedPod
 }
+*/
 
 func getKeys(m map[string]bool) []string {
 	keys := make([]string, 0, len(m))

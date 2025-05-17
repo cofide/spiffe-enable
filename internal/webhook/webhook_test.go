@@ -21,6 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	jsonpatch "github.com/evanphx/json-patch"
 )
 
 func newTestWebhook(t *testing.T) *spiffeEnableWebhook {
@@ -37,7 +39,7 @@ func newTestWebhook(t *testing.T) *spiffeEnableWebhook {
 	}
 }
 
-func newAdmissionRequest(t *testing.T, pod *corev1.Pod) admission.Request {
+func newAdmissionRequest(t *testing.T, pod *corev1.Pod) (admission.Request, []byte) {
 	rawPod, err := json.Marshal(pod)
 	require.NoError(t, err)
 	return admission.Request{
@@ -48,7 +50,7 @@ func newAdmissionRequest(t *testing.T, pod *corev1.Pod) admission.Request {
 			},
 			Kind: metav1.GroupVersionKind{Kind: "Pod", Version: "v1"},
 		},
-	}
+	}, rawPod
 }
 
 func TestSpiffeEnableWebhook_Handle(t *testing.T) {
@@ -296,7 +298,7 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 				pod.Annotations[k] = v
 			}
 
-			req := newAdmissionRequest(t, pod)
+			req, podBytes := newAdmissionRequest(t, pod)
 			resp := wh.Handle(context.Background(), req)
 
 			assert.Equal(t, tt.expectedAllowed, resp.Allowed, "Response Allowed mismatch")
@@ -312,13 +314,39 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			if tt.expectedPatched {
 				// Check either resp.Patch or resp.Patches
 				hasPatch := (len(resp.Patch) > 0) || len(resp.Patches) > 0
-				assert.True(t, hasPatch, "Expected a patch")
+				assert.True(t, hasPatch, "Expected patch(es)")
 
 				if tt.validatePod != nil && resp.Allowed {
-					tt.validatePod(t, pod)
+					modifiedJSON := podBytes
+					for _, p := range resp.Patches {
+						patchBytes, err := p.MarshalJSON()
+						if err != nil {
+							t.Fatalf("Failed to marshal patch: %v", err)
+						}
+
+						patchArrayBytes := append([]byte("["), patchBytes...)
+						patchArrayBytes = append(patchArrayBytes, []byte("]")...)
+
+						patch, err := jsonpatch.DecodePatch(patchArrayBytes)
+						if err != nil {
+							t.Fatalf("Failed to decode patch: %v", err)
+						}
+
+						modifiedJSON, err = patch.Apply(modifiedJSON)
+						if err != nil {
+							panic(err)
+						}
+					}
+
+					// Decode the result
+					var modifiedPod corev1.Pod
+					if err := json.Unmarshal(modifiedJSON, &modifiedPod); err != nil {
+						t.Fatalf("Failed to unmarshal modified pod: %v", err)
+					}
+
+					// Validate the modified pod matches the expected pod
+					tt.validatePod(t, &modifiedPod)
 				}
-			} else if !tt.expectedPatched && tt.validatePod != nil {
-				tt.validatePod(t, pod)
 			}
 		})
 	}
