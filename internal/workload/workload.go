@@ -6,7 +6,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-var spiffeWLVolume = &corev1.Volume{
+var spiffeWLVolume = corev1.Volume{
 	Name: constants.SPIFFEWLVolume,
 	VolumeSource: corev1.VolumeSource{
 		CSI: &corev1.CSIVolumeSource{
@@ -16,26 +16,26 @@ var spiffeWLVolume = &corev1.Volume{
 	},
 }
 
-var spiffeWLVolumeMount = &corev1.VolumeMount{
+var spiffeWLVolumeMount = corev1.VolumeMount{
 	Name:      constants.SPIFFEWLVolume,
 	MountPath: constants.SPIFFEWLMountPath,
 	ReadOnly:  true,
 }
 
-var spiffeWLEnvVar = &corev1.EnvVar{
+var spiffeWLEnvVar = corev1.EnvVar{
 	Name:  constants.SPIFFEWLSocketEnvName,
 	Value: constants.SPIFFEWLSocket,
 }
 
-func GetSPIFFEVolume() *corev1.Volume {
+func GetSPIFFEVolume() corev1.Volume {
 	return spiffeWLVolume
 }
 
-func GetSPIFFEVolumeMount() *corev1.VolumeMount {
+func GetSPIFFEVolumeMount() corev1.VolumeMount {
 	return spiffeWLVolumeMount
 }
 
-func GetSPIFFEEnvVar() *corev1.EnvVar {
+func GetSPIFFEEnvVar() corev1.EnvVar {
 	return spiffeWLEnvVar
 }
 

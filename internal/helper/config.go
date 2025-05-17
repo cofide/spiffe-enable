@@ -88,7 +88,7 @@ func (h SPIFFEHelper) GetSidecarContainer() corev1.Container {
 				Name:      constants.SPIFFEEnableCertVolumeName,
 				MountPath: constants.SPIFFEEnableCertDirectory,
 			},
-			*workload.GetSPIFFEVolumeMount(),
+			workload.GetSPIFFEVolumeMount(),
 		},
 	}
 }

@@ -272,7 +272,7 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			podAnnotations: map[string]string{constants.EnabledAnnotation: "true"},
 			initialPod: func() *corev1.Pod {
 				p := basePod()
-				p.Spec.Volumes = append(p.Spec.Volumes, *workload.GetSPIFFEVolume())
+				p.Spec.Volumes = append(p.Spec.Volumes, workload.GetSPIFFEVolume())
 				return p
 			},
 			expectedAllowed: true,

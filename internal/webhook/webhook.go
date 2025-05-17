@@ -49,7 +49,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 	// Add a CSI volume to the pod for the SPIFFE Workload API
 	if !workload.VolumeExists(pod, constants.SPIFFEWLVolume) {
 		logger.Info("Adding SPIFFE CSI volume", "volumeName", constants.SPIFFEWLVolume)
-		pod.Spec.Volumes = append(pod.Spec.Volumes)
+		pod.Spec.Volumes = append(pod.Spec.Volumes, workload.GetSPIFFEVolume())
 	}
 
 	// Check for a debug annotation
@@ -226,7 +226,7 @@ func getKeys(m map[string]bool) []string {
 	return keys
 }
 
-func ensureCSIVolumeMount(container *corev1.Container, targetMount *corev1.VolumeMount, logger logr.Logger) bool {
+func ensureCSIVolumeMount(container *corev1.Container, targetMount corev1.VolumeMount, logger logr.Logger) bool {
 	madeChange := false
 	mountExists := false
 	mountIndex := -1 // Index of the mount if found by name and path
@@ -252,15 +252,15 @@ func ensureCSIVolumeMount(container *corev1.Container, targetMount *corev1.Volum
 			// Mount does not exist at all, append it
 			logger.Info("Adding new VolumeMount to container",
 				"containerName", container.Name, "volumeMountName", targetMount.Name)
-			container.VolumeMounts = append(container.VolumeMounts, *targetMount)
+			container.VolumeMounts = append(container.VolumeMounts, targetMount)
 			madeChange = true
 		}
 	}
 	return madeChange
 }
 
-func ensureEnvVar(container *corev1.Container, envVar *corev1.EnvVar) {
+func ensureEnvVar(container *corev1.Container, envVar corev1.EnvVar) {
 	if !workload.EnvVarExists(container, envVar.Name) {
-		container.Env = append(container.Env, *envVar)
+		container.Env = append(container.Env, envVar)
 	}
 }
