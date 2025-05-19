@@ -15,6 +15,9 @@ webhooks:
       path: "/inject"
   failurePolicy: Fail
   name: mpod.kb.io
+  namespaceSelector:
+    matchLabels:
+      spiffe.cofide.io/enabled: "true"
   rules:
   - apiGroups:
     - ""
