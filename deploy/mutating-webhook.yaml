@@ -9,7 +9,6 @@ webhooks:
   - v1
   clientConfig:
     service:
-      # has to match the service we created
       namespace: cofide
       name: spiffe-enable-webhook
       port: 9443
