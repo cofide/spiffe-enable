@@ -47,7 +47,7 @@ svid_bundle_file_name = "ca.pem"
 jwt_bundle_file_name = "cert.jwt"
 jwt_svids = [{jwt_audience="aud", jwt_svid_file_name="jwt_svid.token"}]
 daemon_mode = true
-health_checks:  {
+health_checks {
   listener_enabled = true
 }
 `
