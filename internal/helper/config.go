@@ -9,6 +9,7 @@ import (
 	constants "github.com/cofide/spiffe-enable/internal/const"
 	"github.com/cofide/spiffe-enable/internal/workload"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // SPIFFE Helper constants
@@ -25,6 +26,9 @@ const (
 	SPIFFEHelperConfigMountPath           = "/etc/spiffe-helper"
 	SPIFFEHelperConfigFileName            = "config.conf"
 	SPIFFEHelperInitContainerName         = "inject-spiffe-helper-config"
+	SPIFFEHelperHealthCheckReadinessPath  = "/ready"
+	SPIFFEHelperHealthCheckLivenessPath   = "/live"
+	SPIFFEHelperHealthCheckPort           = 8081
 )
 
 var spiffeHelperConfigTmpl = `
@@ -43,6 +47,7 @@ svid_bundle_file_name = "ca.pem"
 jwt_bundle_file_name = "cert.jwt"
 jwt_svids = [{jwt_audience="aud", jwt_svid_file_name="jwt_svid.token"}]
 daemon_mode = true
+health_checks.listener_enabled = true
 `
 
 type SPIFFEHelperConfigParams struct {
@@ -84,16 +89,10 @@ func (h SPIFFEHelper) GetSidecarContainer() corev1.Container {
 		Args:            []string{"-config", filepath.Join(SPIFFEHelperConfigMountPath, SPIFFEHelperConfigFileName)},
 		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"/bin/sh",
-						"-c",
-						fmt.Sprintf("test -f %s && test -f %s && test -f %s",
-							filepath.Join(constants.SPIFFEEnableCertDirectory, "tls.crt"),
-							filepath.Join(constants.SPIFFEEnableCertDirectory, "tls.key"),
-							filepath.Join(constants.SPIFFEEnableCertDirectory, "ca.crt"),
-						),
-					},
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   SPIFFEHelperHealthCheckReadinessPath,
+					Port:   intstr.FromInt(SPIFFEHelperHealthCheckPort),
+					Scheme: corev1.URISchemeHTTP,
 				},
 			},
 			InitialDelaySeconds: 5,  // Start probing 5 seconds after the container starts
@@ -101,6 +100,34 @@ func (h SPIFFEHelper) GetSidecarContainer() corev1.Container {
 			FailureThreshold:    10, // Consider the startup failed after 10 consecutive failures (ie 10 * 5s = 50s)
 			SuccessThreshold:    1,  // How long to wait for the command to complete
 			TimeoutSeconds:      2,  // How long to wait for the command to completes
+		},
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   SPIFFEHelperHealthCheckLivenessPath,
+					Port:   intstr.FromInt(SPIFFEHelperHealthCheckPort),
+					Scheme: corev1.URISchemeHTTP,
+				},
+			},
+			InitialDelaySeconds: 60, // Start after startup probe likely succeeded and app stabilized
+			PeriodSeconds:       15, // Check periodically
+			FailureThreshold:    3,  // Consider failed after 3 consecutive failures
+			SuccessThreshold:    1,
+			TimeoutSeconds:      5,
+		},
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   SPIFFEHelperHealthCheckReadinessPath,
+					Port:   intstr.FromInt(SPIFFEHelperHealthCheckPort),
+					Scheme: corev1.URISchemeHTTP,
+				},
+			},
+			InitialDelaySeconds: 15, // Start checking readiness shortly after startup likely succeeded
+			PeriodSeconds:       10, // Check periodically
+			FailureThreshold:    3,  // Consider not ready after 3 consecutive failures
+			SuccessThreshold:    1,
+			TimeoutSeconds:      5,
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
