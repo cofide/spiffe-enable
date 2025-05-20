@@ -3,8 +3,8 @@ package helper
 import (
 	"bytes"
 	"fmt"
-	"html/template"
 	"path/filepath"
+	"text/template"
 
 	constants "github.com/cofide/spiffe-enable/internal/const"
 	"github.com/cofide/spiffe-enable/internal/workload"

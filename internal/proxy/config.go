@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"path/filepath"
+	"text/template"
 
 	"github.com/cofide/spiffe-enable/internal/helper"
 	corev1 "k8s.io/api/core/v1"

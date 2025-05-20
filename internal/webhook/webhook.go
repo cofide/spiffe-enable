@@ -189,14 +189,14 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 					pod.Spec.Volumes = append(pod.Spec.Volumes, getCertsVolume())
 				}
 
-				if !workload.InitContainerExists(pod, helper.SPIFFEHelperInitContainerName) {
-					logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", helper.SPIFFEHelperInitContainerName)
-					pod.Spec.InitContainers = append([]corev1.Container{spiffeHelper.GetInitContainer()}, pod.Spec.InitContainers...)
-				}
-
 				if !workload.InitContainerExists(pod, helper.SPIFFEHelperSidecarContainerName) {
 					logger.Info("Adding spiffe-helper sidecar container", "initContainerName", helper.SPIFFEHelperSidecarContainerName)
 					pod.Spec.InitContainers = append([]corev1.Container{spiffeHelper.GetSidecarContainer()}, pod.Spec.InitContainers...)
+				}
+
+				if !workload.InitContainerExists(pod, helper.SPIFFEHelperInitContainerName) {
+					logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", helper.SPIFFEHelperInitContainerName)
+					pod.Spec.InitContainers = append([]corev1.Container{spiffeHelper.GetInitContainer()}, pod.Spec.InitContainers...)
 				}
 			}
 		}
