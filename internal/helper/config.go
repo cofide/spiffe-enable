@@ -88,7 +88,11 @@ func (h SPIFFEHelper) GetSidecarContainer() corev1.Container {
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						fmt.Sprintf("test -f %s", filepath.Join(constants.SPIFFEEnableCertDirectory, "tls.crt")),
+						fmt.Sprintf("test -f %s && test -f %s && test -f %s",
+							filepath.Join(constants.SPIFFEEnableCertDirectory, "tls.crt"),
+							filepath.Join(constants.SPIFFEEnableCertDirectory, "tls.key"),
+							filepath.Join(constants.SPIFFEEnableCertDirectory, "ca.crt"),
+						),
 					},
 				},
 			},

@@ -173,22 +173,20 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 				spiffeHelper, err := helper.NewSPIFFEHelper(configParams)
 				if err != nil {
 					logger.Error(err, "Error creating spiffe-helper config")
-					return admission.Errored(http.StatusInternalServerError, fmt.Errorf("error creating spiffe-helper config: %w", err))
+					return admission.Errored(http.StatusInternalServerError,
+						fmt.Errorf("error creating spiffe-helper config: %w", err))
 				}
 
 				// Add an emptyDir volume for the SPIFFE Helper configuration if it doesn't already exist
 				if !workload.VolumeExists(pod, helper.SPIFFEHelperConfigVolumeName) {
-					logger.Info("Adding SPIFFE helper config volume", "volumeName", helper.SPIFFEHelperConfigVolumeName)
+					logger.Info("Adding spiffe-helper config volume", "volumeName", helper.SPIFFEHelperConfigVolumeName)
 					pod.Spec.Volumes = append(pod.Spec.Volumes, spiffeHelper.GetConfigVolume())
 				}
 
 				// Add an emptyDir volume for the certs managed by SPIFFE Helper
 				if !workload.VolumeExists(pod, constants.SPIFFEEnableCertVolumeName) {
-					logger.Info("Adding SPIFFE helper certs volume", "volumeName", constants.SPIFFEEnableCertVolumeName)
-					pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-						Name:         constants.SPIFFEEnableCertVolumeName,
-						VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-					})
+					logger.Info("Adding spiffe-helper certs volume", "volumeName", constants.SPIFFEEnableCertVolumeName)
+					pod.Spec.Volumes = append(pod.Spec.Volumes, getCertsVolume())
 				}
 
 				if !workload.InitContainerExists(pod, helper.SPIFFEHelperInitContainerName) {
@@ -197,7 +195,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 				}
 
 				if !workload.InitContainerExists(pod, helper.SPIFFEHelperSidecarContainerName) {
-					logger.Info("Adding SPIFFE Helper sidecar container", "initContainerName", helper.SPIFFEHelperSidecarContainerName)
+					logger.Info("Adding spiffe-helper sidecar container", "initContainerName", helper.SPIFFEHelperSidecarContainerName)
 					pod.Spec.InitContainers = append([]corev1.Container{spiffeHelper.GetSidecarContainer()}, pod.Spec.InitContainers...)
 				}
 			}
@@ -213,13 +211,16 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
 
-/*
-func AddContainer(pod *corev1.Pod, container corev1.Container, logger logr.Logger) *corev1.Pod {
-	modifiedPod := pod.DeepCopy()
-	modifiedPod.Spec.Containers = append([]corev1.Container{container}, modifiedPod.Spec.InitContainers...)
-	return modifiedPod
+func getCertsVolume() corev1.Volume {
+	return corev1.Volume{
+		Name: constants.SPIFFEEnableCertVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				Medium: corev1.StorageMediumMemory, // In-memory
+			},
+		},
+	}
 }
-*/
 
 func getKeys(m map[string]bool) []string {
 	keys := make([]string, 0, len(m))
