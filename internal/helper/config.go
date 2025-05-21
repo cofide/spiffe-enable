@@ -4,6 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"path/filepath"
+
+	constants "github.com/cofide/spiffe-enable/internal/const"
+	"github.com/cofide/spiffe-enable/internal/workload"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // SPIFFE Helper constants
@@ -46,7 +51,7 @@ type SPIFFEHelperConfigParams struct {
 	IncludeIntermediateBundle bool
 }
 
-func NewSPIFFEHelperConfig(params SPIFFEHelperConfigParams) (*SPIFFEHelperConfig, error) {
+func NewSPIFFEHelper(params SPIFFEHelperConfigParams) (*SPIFFEHelper, error) {
 	tmpl, err := template.New("spiffeHelperConfig").Parse(spiffeHelperConfigTmpl)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse spiffe-helper config template: %w", err)
@@ -57,9 +62,66 @@ func NewSPIFFEHelperConfig(params SPIFFEHelperConfigParams) (*SPIFFEHelperConfig
 		return nil, fmt.Errorf("failed to render spiffe-helper config template with params: %w", err)
 	}
 
-	return &SPIFFEHelperConfig{Cfg: renderedCfg.String()}, nil
+	return &SPIFFEHelper{Cfg: renderedCfg.String()}, nil
 }
 
-type SPIFFEHelperConfig struct {
+func (h SPIFFEHelper) GetConfigVolume() corev1.Volume {
+	return corev1.Volume{
+		Name:         SPIFFEHelperConfigVolumeName,
+		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+	}
+}
+
+func (h SPIFFEHelper) GetSidecarContainer() corev1.Container {
+	return corev1.Container{
+		Name:            SPIFFEHelperSidecarContainerName,
+		Image:           SPIFFEHelperImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Args:            []string{"-config", filepath.Join(SPIFFEHelperConfigMountPath, SPIFFEHelperConfigFileName)},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      SPIFFEHelperConfigVolumeName,
+				MountPath: SPIFFEHelperConfigMountPath,
+				ReadOnly:  true,
+			},
+			{
+				Name:      constants.SPIFFEEnableCertVolumeName,
+				MountPath: constants.SPIFFEEnableCertDirectory,
+			},
+			workload.GetSPIFFEVolumeMount(),
+		},
+	}
+}
+
+func (h SPIFFEHelper) GetInitContainer() corev1.Container {
+	configFilePath := filepath.Join(SPIFFEHelperConfigMountPath, SPIFFEHelperConfigFileName)
+	writeCmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s && echo -e \"\\n=== SPIFFE Helper Config ===\" && cat %s && echo -e \"\\n===========================\"",
+		filepath.Dir(configFilePath),
+		SPIFFEHelperConfigContentEnvVar,
+		configFilePath,
+		configFilePath)
+
+	return corev1.Container{
+		Name:            SPIFFEHelperInitContainerName,
+		Image:           InitHelperImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command:         []string{"/bin/sh", "-c"},
+		Args:            []string{writeCmd},
+		Env: []corev1.EnvVar{{
+			Name:  SPIFFEHelperConfigContentEnvVar,
+			Value: h.Cfg,
+		}},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name: SPIFFEHelperConfigVolumeName, MountPath: filepath.Dir(configFilePath),
+			},
+			{
+				Name: constants.SPIFFEEnableCertVolumeName, MountPath: constants.SPIFFEEnableCertDirectory,
+			},
+		},
+	}
+}
+
+type SPIFFEHelper struct {
 	Cfg string
 }

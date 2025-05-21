@@ -2,8 +2,14 @@ package proxy
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"path/filepath"
+
+	"github.com/cofide/spiffe-enable/internal/helper"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 )
 
 // Envoy-specific constants
@@ -18,6 +24,7 @@ const (
 	EnvoyConfigFileName          = "envoy.yaml"
 	EnvoyConfigContentEnvVar     = "ENVOY_CONFIG_CONTENT"
 	EnvoyConfigInitContainerName = "inject-envoy-config"
+	EnvoyPort                    = 10000
 )
 
 const nftablesSetupScript = `
@@ -63,12 +70,12 @@ type EnvoyConfigParams struct {
 	AgentXDSPort    uint32
 }
 
-type EnvoyConfig struct {
+type Envoy struct {
 	InitScript string
-	Cfg        map[string]interface{}
+	Cfg        []byte
 }
 
-func NewEnvoyConfig(params EnvoyConfigParams) (*EnvoyConfig, error) {
+func NewEnvoy(params EnvoyConfigParams) (*Envoy, error) {
 	if params.NodeID == "" {
 		params.NodeID = "node"
 	}
@@ -165,5 +172,68 @@ func NewEnvoyConfig(params EnvoyConfigParams) (*EnvoyConfig, error) {
 		return nil, fmt.Errorf("failed to render nftables init script template with params: %w", err)
 	}
 
-	return &EnvoyConfig{InitScript: renderedScript.String(), Cfg: cfg}, nil
+	envoyConfigJSON, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling proxy config to JSON")
+	}
+
+	return &Envoy{InitScript: renderedScript.String(), Cfg: envoyConfigJSON}, nil
+}
+
+func (e Envoy) GetConfigVolume() corev1.Volume {
+	return corev1.Volume{
+		Name:         EnvoyConfigVolumeName,
+		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+	}
+}
+
+func (e Envoy) GetInitContainer() corev1.Container {
+	configFilePath := filepath.Join(EnvoyConfigMountPath, EnvoyConfigFileName)
+
+	// This command writes out an Envoy config file based on the contents of the environment variable
+	envoyConfigCmd := fmt.Sprintf("mkdir -p %s && printf '%%s' \"${%s}\" > %s",
+		filepath.Dir(configFilePath),
+		EnvoyConfigContentEnvVar,
+		configFilePath)
+
+	cmd := fmt.Sprintf("set -e; %s && %s", envoyConfigCmd, e.InitScript)
+
+	return corev1.Container{
+		Name:            EnvoyConfigInitContainerName,
+		Image:           helper.InitHelperImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command:         []string{"/bin/sh", "-c"},
+		Args:            []string{cmd},
+		Env:             []corev1.EnvVar{{Name: EnvoyConfigContentEnvVar, Value: string(e.Cfg)}},
+		VolumeMounts:    []corev1.VolumeMount{{Name: EnvoyConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
+		SecurityContext: &corev1.SecurityContext{
+			Capabilities: &corev1.Capabilities{
+				Add: []corev1.Capability{"NET_ADMIN"}, // # NET_ADMIN is required to apply nftables rules
+			},
+			RunAsUser: ptr.To(int64(0)), // # Run as root in order to apply nftables rules
+		},
+	}
+}
+
+func (e Envoy) GetSidecarContainer() corev1.Container {
+	configFilePath := filepath.Join(EnvoyConfigMountPath, EnvoyConfigFileName)
+
+	return corev1.Container{
+		Name:            EnvoySidecarContainerName,
+		Image:           EnvoyImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command:         []string{"envoy"},
+		Args:            []string{"-c", configFilePath},
+		VolumeMounts:    []corev1.VolumeMount{{Name: EnvoyConfigVolumeName, MountPath: EnvoyConfigMountPath}},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:    ptr.To(int64(101)), // # Run as non-root user
+			RunAsGroup:   ptr.To(int64(101)), // # Run as non-root group
+			RunAsNonRoot: ptr.To(true),
+		},
+		Ports: []corev1.ContainerPort{
+			{
+				ContainerPort: EnvoyPort,
+			},
+		},
+	}
 }
