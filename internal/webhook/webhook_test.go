@@ -349,6 +349,10 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 					// Validate the modified pod matches the expected pod
 					tt.validatePod(t, &modifiedPod)
 				}
+			} else {
+				// Check for no patches when not expected
+				assert.Empty(t, resp.Patch)
+				assert.Empty(t, resp.Patches)
 			}
 		})
 	}
