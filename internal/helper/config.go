@@ -34,7 +34,7 @@ const (
 )
 
 // Structs from github.com/spiffe/spiffe-helper/cmd/spiffe-helper/config
-// Embedded for now as the structs are designed for decoding, not encoding to HCL (our case case)
+// Copied for now as the upstream structs are designed for decoding, not encoding to HCL (our case case)
 type SPIFFEHelperConfig struct {
 	AddIntermediatesToBundle bool                     `hcl:"add_intermediates_to_bundle"`
 	AgentAddress             string                   `hcl:"agent_address"`
@@ -86,6 +86,10 @@ type SPIFFEHelperConfigParams struct {
 }
 
 func NewSPIFFEHelper(params SPIFFEHelperConfigParams) (*SPIFFEHelper, error) {
+	if params.AgentAddress == "" || params.CertPath == "" {
+		return nil, fmt.Errorf("missin spiffe-helper configuration parameters")
+	}
+
 	spiffeHelperCfg := new(SPIFFEHelperConfig)
 
 	spiffeHelperCfg = &SPIFFEHelperConfig{
