@@ -87,7 +87,7 @@ type SPIFFEHelperConfigParams struct {
 
 func NewSPIFFEHelper(params SPIFFEHelperConfigParams) (*SPIFFEHelper, error) {
 	if params.AgentAddress == "" || params.CertPath == "" {
-		return nil, fmt.Errorf("missin spiffe-helper configuration parameters")
+		return nil, fmt.Errorf("missing spiffe-helper configuration parameters")
 	}
 
 	spiffeHelperCfg := new(SPIFFEHelperConfig)
