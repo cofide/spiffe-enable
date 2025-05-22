@@ -9,13 +9,15 @@ webhooks:
   - v1
   clientConfig:
     service:
-      # has to match the service we created
       namespace: cofide
       name: spiffe-enable-webhook
       port: 9443
       path: "/inject"
   failurePolicy: Fail
-  name: mpod.kb.io
+  name: spiffe-enable.cofide.io
+  namespaceSelector:
+    matchLabels:
+      spiffe.cofide.io/enabled: "true"
   rules:
   - apiGroups:
     - ""

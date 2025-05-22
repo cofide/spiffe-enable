@@ -111,14 +111,14 @@ func NewSPIFFEHelper(params SPIFFEHelperConfigParams) (*SPIFFEHelper, error) {
 	return &SPIFFEHelper{Config: hclString}, nil
 }
 
-func (h SPIFFEHelper) GetConfigVolume() corev1.Volume {
+func (h *SPIFFEHelper) GetConfigVolume() corev1.Volume {
 	return corev1.Volume{
 		Name:         SPIFFEHelperConfigVolumeName,
 		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 	}
 }
 
-func (h SPIFFEHelper) GetSidecarContainer() corev1.Container {
+func (h *SPIFFEHelper) GetSidecarContainer() corev1.Container {
 	// Required in order for this sidecar to be native
 	var restartPolicyAlways = corev1.ContainerRestartPolicyAlways
 
@@ -185,7 +185,7 @@ func (h SPIFFEHelper) GetSidecarContainer() corev1.Container {
 	}
 }
 
-func (h SPIFFEHelper) GetInitContainer() corev1.Container {
+func (h *SPIFFEHelper) GetInitContainer() corev1.Container {
 	configFilePath := filepath.Join(SPIFFEHelperConfigMountPath, SPIFFEHelperConfigFileName)
 	writeCmd := fmt.Sprintf("mkdir -p %s && printf %%s \"$${%s}\" > %s && echo -e \"\\n=== SPIFFE Helper Config ===\" && cat %s && echo -e \"\\n===========================\"",
 		filepath.Dir(configFilePath),
