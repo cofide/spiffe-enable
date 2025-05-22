@@ -60,16 +60,12 @@ type SPIFFEHelperConfig struct {
 	// JWT configuration
 	JWTSVIDs          []SPIFFEHelperJWTConfig `hcl:"jwt_svids,block"`
 	JWTBundleFilename string                  `hcl:"jwt_bundle_file_name"`
-
-	//UnusedKeyPositions map[string][]token.Pos `hcl:",unusedKeyPositions"`
 }
 
 type SPIFFEHelperJWTConfig struct {
 	JWTAudience       string   `hcl:"jwt_audience"`
 	JWTExtraAudiences []string `hcl:"jwt_extra_audiences"`
 	JWTSVIDFilename   string   `hcl:"jwt_svid_file_name"`
-
-	//UnusedKeyPositions map[string][]token.Pos `hcl:",unusedKeyPositions"`
 }
 
 type SPIFFEHelperHealthConfig struct {
