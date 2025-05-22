@@ -32,11 +32,13 @@ func newTestWebhook(t *testing.T) *spiffeEnableWebhook {
 	decoder := admission.NewDecoder(scheme)
 	require.NotNil(t, decoder)
 
-	return &spiffeEnableWebhook{
-		Client:  fake.NewClientBuilder().WithScheme(scheme).Build(),
-		decoder: decoder,
-		Log:     testr.New(t),
-	}
+	webhook, err := NewSpiffeEnableWebhook(
+		fake.NewClientBuilder().WithScheme(scheme).Build(),
+		testr.New(t),
+		decoder)
+	require.NoError(t, err)
+
+	return webhook
 }
 
 func newAdmissionRequest(t *testing.T, pod *corev1.Pod) (admission.Request, []byte) {
@@ -146,7 +148,7 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 				for _, c := range mutatedPod.Spec.Containers {
 					if c.Name == constants.DebugUIContainerName {
 						foundDebugUI = true
-						assert.Equal(t, constants.DebugUIImage, c.Image)
+						assert.Equal(t, constants.DefaultDebugUIImage, c.Image)
 						require.Len(t, c.Ports, 1)
 						assert.Equal(t, int32(constants.DebugUIPort), c.Ports[0].ContainerPort)
 						break
@@ -347,6 +349,10 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 					// Validate the modified pod matches the expected pod
 					tt.validatePod(t, &modifiedPod)
 				}
+			} else {
+				// Check for no patches when not expected
+				assert.Empty(t, resp.Patch)
+				assert.Empty(t, resp.Patches)
 			}
 		})
 	}

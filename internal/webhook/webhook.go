@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	constants "github.com/cofide/spiffe-enable/internal/const"
@@ -24,7 +25,15 @@ type spiffeEnableWebhook struct {
 	Log     logr.Logger
 }
 
+var (
+	debugUIImage string
+)
+
 func NewSpiffeEnableWebhook(client client.Client, log logr.Logger, decoder admission.Decoder) (*spiffeEnableWebhook, error) {
+	debugUIImage = getEnvWithDefault(constants.EnvVarUIImage, constants.DefaultDebugUIImage)
+
+	log.Info(debugUIImage)
+
 	return &spiffeEnableWebhook{
 		Client:  client,
 		Log:     log,
@@ -60,7 +69,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 			logger.Info("Adding SPIFFE Enable debug UI container", "containerName", constants.DebugUIContainerName)
 			debugSidecar := corev1.Container{
 				Name:            constants.DebugUIContainerName,
-				Image:           constants.DebugUIImage,
+				Image:           debugUIImage,
 				ImagePullPolicy: corev1.PullAlways,
 				Ports: []corev1.ContainerPort{
 					{
@@ -267,4 +276,12 @@ func ensureEnvVar(container *corev1.Container, envVar corev1.EnvVar) {
 	if !workload.EnvVarExists(container, envVar.Name) {
 		container.Env = append(container.Env, envVar)
 	}
+}
+
+func getEnvWithDefault(variable string, defaultValue string) string {
+	v, ok := os.LookupEnv(variable)
+	if !ok {
+		return defaultValue
+	}
+	return v
 }
