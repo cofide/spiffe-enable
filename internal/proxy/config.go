@@ -180,14 +180,14 @@ func NewEnvoy(params EnvoyConfigParams) (*Envoy, error) {
 	return &Envoy{InitScript: renderedScript.String(), Cfg: envoyConfigJSON}, nil
 }
 
-func (e Envoy) GetConfigVolume() corev1.Volume {
+func (e *Envoy) GetConfigVolume() corev1.Volume {
 	return corev1.Volume{
 		Name:         EnvoyConfigVolumeName,
 		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 	}
 }
 
-func (e Envoy) GetInitContainer() corev1.Container {
+func (e *Envoy) GetInitContainer() corev1.Container {
 	configFilePath := filepath.Join(EnvoyConfigMountPath, EnvoyConfigFileName)
 
 	// This command writes out an Envoy config file based on the contents of the environment variable
@@ -215,7 +215,7 @@ func (e Envoy) GetInitContainer() corev1.Container {
 	}
 }
 
-func (e Envoy) GetSidecarContainer() corev1.Container {
+func (e *Envoy) GetSidecarContainer() corev1.Container {
 	configFilePath := filepath.Join(EnvoyConfigMountPath, EnvoyConfigFileName)
 
 	return corev1.Container{
