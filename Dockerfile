@@ -12,7 +12,7 @@ RUN go mod download
 
 # Copy the go source
 COPY cmd/manager/main.go cmd/manager/main.go
-COPY internal/webhook/ internal/webhook/
+COPY internal internal
 
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
