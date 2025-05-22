@@ -1,23 +1,25 @@
 package helper
 
 import (
-	"bytes"
 	"fmt"
 	"path/filepath"
-	"text/template"
 
 	constants "github.com/cofide/spiffe-enable/internal/const"
 	"github.com/cofide/spiffe-enable/internal/workload"
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/hashicorp/hcl/v2/gohcl"
 )
 
-// SPIFFE Helper constants
+// Images
 var (
 	SPIFFEHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
 	InitHelperImage   = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-init:v0.1.0-alpha"
 )
 
+// Constants
 const (
 	SPIFFEHelperIncIntermediateAnnotation = "spiffe.cofide.io/spiffe-helper-include-intermediate-bundle"
 	SPIFFEHelperConfigVolumeName          = "spiffe-helper-config"
@@ -31,26 +33,47 @@ const (
 	SPIFFEHelperHealthCheckPort           = 8081
 )
 
-var spiffeHelperConfigTmpl = `
-agent_address = "{{ .AgentAddress }}"
-include_federated_domains = true
-{{ if .IncludeIntermediateBundle }}
-add_intermediates_to_bundle = true
-{{ end }}
-cmd = ""
-cmd_args = ""
-cert_dir = "{{ .CertPath }}"
-renew_signal = ""
-svid_file_name = "tls.crt"
-svid_key_file_name = "tls.key"
-svid_bundle_file_name = "ca.pem"
-jwt_bundle_file_name = "cert.jwt"
-jwt_svids = [{jwt_audience="aud", jwt_svid_file_name="jwt_svid.token"}]
-daemon_mode = true
-health_checks {
-  listener_enabled = true
+// Structs from github.com/spiffe/spiffe-helper/cmd/spiffe-helper/config
+// Copied for now as the upstream structs are designed for decoding, not encoding to HCL (our case case)
+type SPIFFEHelperConfig struct {
+	AddIntermediatesToBundle bool                     `hcl:"add_intermediates_to_bundle"`
+	AgentAddress             string                   `hcl:"agent_address"`
+	Cmd                      string                   `hcl:"cmd"`
+	CmdArgs                  string                   `hcl:"cmd_args"`
+	PIDFilename              string                   `hcl:"pid_file_name"`
+	CertDir                  string                   `hcl:"cert_dir"`
+	CertFileMode             int                      `hcl:"cert_file_mode"`
+	KeyFileMode              int                      `hcl:"key_file_mode"`
+	JWTBundleFileMode        int                      `hcl:"jwt_bundle_file_mode"`
+	JWTSVIDFileMode          int                      `hcl:"jwt_svid_file_mode"`
+	IncludeFederatedDomains  bool                     `hcl:"include_federated_domains"`
+	RenewSignal              string                   `hcl:"renew_signal"`
+	DaemonMode               *bool                    `hcl:"daemon_mode"`
+	HealthCheck              SPIFFEHelperHealthConfig `hcl:"health_check,block"`
+	Hint                     string                   `hcl:"hint"`
+
+	// x509 configuration
+	SVIDFilename       string `hcl:"svid_file_name"`
+	SVIDKeyFilename    string `hcl:"svid_key_file_name"`
+	SVIDBundleFilename string `hcl:"svid_bundle_file_name"`
+
+	// JWT configuration
+	JWTSVIDs          []SPIFFEHelperJWTConfig `hcl:"jwt_svids,block"`
+	JWTBundleFilename string                  `hcl:"jwt_bundle_file_name"`
 }
-`
+
+type SPIFFEHelperJWTConfig struct {
+	JWTAudience       string   `hcl:"jwt_audience"`
+	JWTExtraAudiences []string `hcl:"jwt_extra_audiences"`
+	JWTSVIDFilename   string   `hcl:"jwt_svid_file_name"`
+}
+
+type SPIFFEHelperHealthConfig struct {
+	ListenerEnabled bool   `hcl:"listener_enabled"`
+	BindPort        int    `hcl:"bind_port"`
+	LivenessPath    string `hcl:"liveness_path"`
+	ReadinessPath   string `hcl:"readiness_path"`
+}
 
 type SPIFFEHelperConfigParams struct {
 	AgentAddress              string
@@ -59,17 +82,33 @@ type SPIFFEHelperConfigParams struct {
 }
 
 func NewSPIFFEHelper(params SPIFFEHelperConfigParams) (*SPIFFEHelper, error) {
-	tmpl, err := template.New("spiffeHelperConfig").Parse(spiffeHelperConfigTmpl)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse spiffe-helper config template: %w", err)
+	if params.AgentAddress == "" || params.CertPath == "" {
+		return nil, fmt.Errorf("missing spiffe-helper configuration parameters")
 	}
 
-	var renderedCfg bytes.Buffer
-	if err := tmpl.Execute(&renderedCfg, params); err != nil {
-		return nil, fmt.Errorf("failed to render spiffe-helper config template with params: %w", err)
+	spiffeHelperCfg := new(SPIFFEHelperConfig)
+
+	spiffeHelperCfg = &SPIFFEHelperConfig{
+		CertDir:                  params.CertPath,
+		DaemonMode:               BoolPtr(true),
+		IncludeFederatedDomains:  true,
+		AgentAddress:             params.AgentAddress,
+		AddIntermediatesToBundle: params.IncludeIntermediateBundle,
+		SVIDFilename:             "tls.crt",
+		SVIDKeyFilename:          "tls.key",
+		SVIDBundleFilename:       "ca.pem",
+		HealthCheck: SPIFFEHelperHealthConfig{
+			ListenerEnabled: true,
+		},
 	}
 
-	return &SPIFFEHelper{Cfg: renderedCfg.String()}, nil
+	// Marshal to an HCL-formatted string
+	hclFile := hclwrite.NewEmptyFile()
+	gohcl.EncodeIntoBody(spiffeHelperCfg, hclFile.Body())
+	hclBytes := hclFile.Bytes()
+	hclString := string(hclBytes)
+
+	return &SPIFFEHelper{Config: hclString}, nil
 }
 
 func (h *SPIFFEHelper) GetConfigVolume() corev1.Volume {
@@ -162,7 +201,7 @@ func (h *SPIFFEHelper) GetInitContainer() corev1.Container {
 		Args:            []string{writeCmd},
 		Env: []corev1.EnvVar{{
 			Name:  SPIFFEHelperConfigContentEnvVar,
-			Value: h.Cfg,
+			Value: h.Config,
 		}},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -176,5 +215,9 @@ func (h *SPIFFEHelper) GetInitContainer() corev1.Container {
 }
 
 type SPIFFEHelper struct {
-	Cfg string
+	Config string
+}
+
+func BoolPtr(b bool) *bool {
+	return &b
 }
