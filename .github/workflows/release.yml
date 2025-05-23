@@ -26,6 +26,27 @@ jobs:
             platform: linux/arm64
             runs-on: connect-ci-runner-arm
             arch: arm64
+          - dockerfile: Dockerfile.nftables
+            repo: amazonaws.com/cofide/spiffe-enable-init
+            platform: linux/amd64
+            runs-on: ubuntu-latest
+            arch: amd64
+          - dockerfile: Dockerfile.nftables
+            repo: amazonaws.com/cofide/spiffe-enable-init
+            platform: linux/arm64
+            runs-on: connect-ci-runner-arm
+            arch: arm64
+          - dockerfile: Dockerfile.ui
+            repo: amazonaws.com/cofide/spiffe-enable-ui
+            platform: linux/amd64
+            runs-on: ubuntu-latest
+            arch: amd64
+          - dockerfile: Dockerfile.ui
+            repo: amazonaws.com/cofide/spiffe-enable-ui
+            platform: linux/arm64
+            runs-on: connect-ci-runner-arm
+            arch: arm64
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
