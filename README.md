@@ -1,11 +1,14 @@
-# spiffe-enable: enabling SPIFFE for workloads
+# spiffe-enable: enabling SPIFFE identity for Kubernetes workloads
 
-`spiffe-enable` is a Kubernetes admission webhook to auto-inject components that enable SPIFFE for workloads, including application workloads that are not SPIFFE-native. The purpose of the project is to provide seamless automation and easily onboard workloads to a SPIFFE-enabled enviroment (eg [SPIRE](https://github.com/spiffe/spire) or [Cofide's Connect](#production-use-cases)).
+`spiffe-enable` is a Kubernetes admission webhook to auto-inject components that enable SPIFFE for workloads, including application workloads that are not SPIFFE-native. The purpose of the project is to provide seamless automation and easily onboard workloads to a SPIFFE-enabled enviroment (eg [SPIRE](https://github.com/spiffe/spire) or [Cofide's Connect](#production-use-cases)) using components, including:
 
 - [spiffe-helper](https://github.com/spiffe/spiffe-helper)
 - [Envoy proxy](https://github.com/envoyproxy/envoy)
+- A `spiffe-enable` UI to debug a workload's credentials
 
 ## How to use
+
+### Admission webhook
 
 In order to use the admission webhook:
 
@@ -18,14 +21,28 @@ The modes that are currently available:
 - `spiffe.cofide.io/mode: helper`: a `spiffe-helper` sidecar container will be injected 
 - `spiffe.cofide.io/mode: proxy`: an Envoy sidecar container will be injected  (note: used in conjuction with [Cofide's Connect Agent](#production-use-cases))
 
+## Debug UI
+
+`spiffe-enable` provides a basic UI to help user's debug the configuration and credentials that have been received by the workload identity provider - eg the SVID and the trust bundle. 
+
+To use the debug UI. add the annotation `spiffe.cofide.io/debug: true`. 
+
 ## Installation
 
-`spiffe-enable` is a Kubernetes mutating admission webhook. The easiest method to install `spiffe-enable` in a cluster is to use the [Helm chart](https://github.com/cofide/helm-charts) provided by Cofide.
+`spiffe-enable` is a Kubernetes mutating admission webhook. The easiest method to install `spiffe-enable` in a cluster is to use the [Helm chart](https://github.com/cofide/helm-charts) provided by Cofide:
+
+```sh
+helm install
+```
 
 ## Development
 
+`spiffe-enable` is a Kubernetes mutating admission webhook that is built on [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime).
+The webhook is implemented in `webhook`
+
 ### Prerequisites
-- go version v1.22.0+
+
+- go version v1.24.0+
 - docker version 17.03+.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
