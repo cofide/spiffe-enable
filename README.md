@@ -1,4 +1,4 @@
-# spiffe-enable: enabling SPIFFE identity for Kubernetes workloads
+# spiffe-enable: enabling SPIFFE for Kubernetes workloads
 
 `spiffe-enable` is a Kubernetes admission webhook to auto-inject components that enable SPIFFE for workloads, including application workloads that are not SPIFFE-native. The purpose of the project is to provide seamless automation and easily onboard workloads to a SPIFFE-enabled enviroment (eg [SPIRE](https://github.com/spiffe/spire) or [Cofide's Connect](#production-use-cases)) using components, including:
 
@@ -18,11 +18,12 @@ In order to use the admission webhook:
 
 The modes that are currently available:
 
-|  Mode | Description
-| `helper` | A `spiffe-helper` sidecar container will be injected 
-| `proxy` | An Envoy sidecar container will be injected  (note: used in conjuction with [Cofide's Connect Agent](#production-use-cases))
+|  Mode     | Description |
+| --------- | ----------- |
+| `helper`  | A `spiffe-helper` sidecar container will be injected |
+| `proxy`   | An Envoy sidecar container will be injected. Note: this is to be used in conjuction with [Cofide's Connect Agent](#production-use-cases) |
 
-## Debug UI
+### Debug UI
 
 `spiffe-enable` also provides a basic UI to help user's debug the configuration and credentials that have been received by the workload identity provider - eg the SVID and the trust bundle. 
 
