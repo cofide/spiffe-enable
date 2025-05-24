@@ -14,22 +14,29 @@ In order to use the admission webhook:
 
 - the workload's namespace requires a `spiffe.cofide.io/enabled: true` label to 'opt in' to the auto-injection;
 - each pod in the namespace will see a SPIFFE CSI volume and environment variable automatically injected on admission;
-- additional components can also be auto-injected on a per-pod basis using the `spiffe.cofide.io/mode` annotation.
+- additional components can also be auto-injected on a per-pod basis using the `spiffe.cofide.io/inject` annotation in a comma-delimited list.
 
 The modes that are currently available:
 
-- `spiffe.cofide.io/mode: helper`: a `spiffe-helper` sidecar container will be injected 
-- `spiffe.cofide.io/mode: proxy`: an Envoy sidecar container will be injected  (note: used in conjuction with [Cofide's Connect Agent](#production-use-cases))
+|  Mode | Description
+| `helper` | A `spiffe-helper` sidecar container will be injected 
+| `proxy` | An Envoy sidecar container will be injected  (note: used in conjuction with [Cofide's Connect Agent](#production-use-cases))
 
 ## Debug UI
 
-`spiffe-enable` provides a basic UI to help user's debug the configuration and credentials that have been received by the workload identity provider - eg the SVID and the trust bundle. 
+`spiffe-enable` also provides a basic UI to help user's debug the configuration and credentials that have been received by the workload identity provider - eg the SVID and the trust bundle. 
 
-To use the debug UI. add the annotation `spiffe.cofide.io/debug: true`. 
+To use the debug UI. add the annotation `spiffe.cofide.io/debug: true` to the template of the pod you wish to debug. By default, the UI serves on the container port 8080; use `port-forward` to connect to it (you may wish to choose a different local port):
+
+```sh
+kubectl port-forward [pod-name] 8080 
+```
+
+You can now browse to `http://localhost:8080` to use the UI.
 
 ## Installation
 
-`spiffe-enable` is a Kubernetes mutating admission webhook. The easiest method to install `spiffe-enable` in a cluster is to use the [Helm chart](https://github.com/cofide/helm-charts) provided by Cofide:
+`spiffe-enable` is a Kubernetes mutating admission webhook. The easiest method of installation in a cluster is to use the [Helm chart](https://github.com/cofide/helm-charts) provided by Cofide:
 
 ```sh
 helm install
