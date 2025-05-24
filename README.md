@@ -19,7 +19,7 @@ In order to use the admission webhook:
 The modes that are currently available:
 
 |  Mode     | Description |
-| --------- | ----------- |
+| --------- | :--- |
 | `helper`  | A `spiffe-helper` sidecar container will be injected |
 | `proxy`   | An Envoy sidecar container will be injected. Note: this is to be used in conjuction with [Cofide's Connect Agent](#production-use-cases) |
 
