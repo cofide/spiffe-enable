@@ -71,7 +71,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          tags: ${{format('{0}.dkr.ecr.{1}.{2}:{3}-{4}', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, matrix.arch, v0.2.1-test)}}
+          tags: ${{format('{0}.dkr.ecr.{1}.{2}:{3}-{4}', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, matrix.arch, "v0.2.1-test")}}
 
   build-merge-arch-images:
     runs-on: ubuntu-latest
@@ -95,8 +95,8 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
       - name: pull images
         run: |
-          docker pull --platform linux/amd64 ${{format('{0}.dkr.ecr.{1}.{2}:amd64-{3}', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, v0.2.1-test)}}
-          docker pull --platform linux/arm64 ${{format('{0}.dkr.ecr.{1}.{2}:arm64-{3}', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, v0.2.1-test)}}
+          docker pull --platform linux/amd64 ${{format('{0}.dkr.ecr.{1}.{2}:amd64-{3}', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, "v0.2.1-test")}}
+          docker pull --platform linux/arm64 ${{format('{0}.dkr.ecr.{1}.{2}:arm64-{3}', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, "v0.2.1-test")}}
       - name: Merge images
         run: |
           docker manifest create $IMAGE --amend $IMAGE_AMD64 --amend $IMAGE_ARM64
@@ -104,6 +104,6 @@ jobs:
           docker manifest annotate $IMAGE $IMAGE_ARM64  --os linux --arch arm64
           docker manifest push $IMAGE
         env:
-          IMAGE_AMD64: ${{format('{0}.dkr.ecr.{1}.{2}:amd64-{3}', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, v0.2.1-test)}}
-          IMAGE_ARM64: ${{format('{0}.dkr.ecr.{1}.{2}:arm64-{3}', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, v0.2.1-test)}}
-          IMAGE: ${{format('{0}.dkr.ecr.{1}.{2}:{3}', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, v0.2.1-test)}}
+          IMAGE_AMD64: ${{format('{0}.dkr.ecr.{1}.{2}:amd64-{3}', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, "v0.2.1-test")}}
+          IMAGE_ARM64: ${{format('{0}.dkr.ecr.{1}.{2}:arm64-{3}', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, "v0.2.1-test")}}
+          IMAGE: ${{format('{0}.dkr.ecr.{1}.{2}:{3}', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, "v0.2.1-test")}}
