@@ -45,8 +45,7 @@ helm install
 
 ## Development
 
-`spiffe-enable` is a Kubernetes mutating admission webhook that is built on [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime).
-The webhook is implemented in `webhook`
+`spiffe-enable` is a Kubernetes mutating admission webhook that is built on [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime). The webhook is implemented in [`webhook`](webhook/webhook.go) and the `spiffe-helper` and `proxy` injection in [`internal/helper`](internal/helper/config.go) and [`internal/proxy`](internal/proxy/config.go), respectively.
 
 ### Prerequisites
 
