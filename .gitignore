@@ -28,3 +28,6 @@ go.work
 
 # remove the binary if its been built
 injector-webhook
+
+# remove the dist directory used by GoReleaser for builds
+dist
