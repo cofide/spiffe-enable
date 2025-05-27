@@ -18,32 +18,32 @@ jobs:
       matrix:
         include:
           - dockerfile: Dockerfile
-            repo: amazonaws.com/cofide/spiffe-enable
+            repo: ghcr.io/cofide/spiffe-enable
             platform: linux/amd64
             runs-on: ubuntu-latest
             arch: amd64
           - dockerfile: Dockerfile
-            repo: amazonaws.com/cofide/spiffe-enable
+            repo: ghcr.io/cofide/spiffe-enable
             platform: linux/arm64
             runs-on: connect-ci-runner-arm
             arch: arm64
           - dockerfile: Dockerfile.nftables
-            repo: amazonaws.com/cofide/spiffe-enable-init
+            repo: ghcr.io/cofide/spiffe-enable-init
             platform: linux/amd64
             runs-on: ubuntu-latest
             arch: amd64
           - dockerfile: Dockerfile.nftables
-            repo: amazonaws.com/cofide/spiffe-enable-init
+            repo: ghcr.io/cofide/spiffe-enable-init
             platform: linux/arm64
             runs-on: connect-ci-runner-arm
             arch: arm64
           - dockerfile: Dockerfile.ui
-            repo: amazonaws.com/cofide/spiffe-enable-ui
+            repo: ghcr.io/cofide/spiffe-enable-ui
             platform: linux/amd64
             runs-on: ubuntu-latest
             arch: amd64
           - dockerfile: Dockerfile.ui
-            repo: amazonaws.com/cofide/spiffe-enable-ui
+            repo: ghcr.io/cofide/spiffe-enable-ui
             platform: linux/arm64
             runs-on: connect-ci-runner-arm
             arch: arm64
@@ -53,14 +53,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/connect-ecr-gh-actions-access
-          role-session-name: connect-ecr-gh-actions-access
-          aws-region: ${{ secrets.AWS_REGION }}
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -71,7 +63,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          tags: ${{format('{0}.dkr.ecr.{1}.{2}:{3}-v0.2.1-test', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo, matrix.arch)}}
+          tags: ${{format('{0}:{1}-v0.1.2-test', matrix.repo, matrix.arch)}}
 
   build-merge-arch-images:
     runs-on: ubuntu-latest
@@ -79,26 +71,18 @@ jobs:
     strategy:
       matrix:
         include:
-          - repo: amazonaws.com/cofide/spiffe-enable
-          - repo: amazonaws.com/cofide/spiffe-enable-init
-          - repo: amazonaws.com/cofide/spiffe-enable-ui
+          - repo: ghcr.io/cofide/spiffe-enable
+          - repo: ghcr.io/cofide/spiffe-enable-init
+          - repo: ghcr.io/cofide/spiffe-enable-ui
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/connect-ecr-gh-actions-access
-          role-session-name: connect-ecr-gh-actions-access
-          aws-region: ${{ secrets.AWS_REGION }}
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
       - name: pull images
         run: |
-          docker pull --platform linux/amd64 ${{format('{0}.dkr.ecr.{1}.{2}:amd64-v0.2.1-test', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo)}}
-          docker pull --platform linux/arm64 ${{format('{0}.dkr.ecr.{1}.{2}:arm64-v0.2.1-test', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo)}}
+          docker pull --platform linux/amd64 ${{format('{0}:amd64-v0.2.1-test', matrix.repo)}}
+          docker pull --platform linux/arm64 ${{format('{0}:arm64-v0.2.1-test', matrix.repo)}}
       - name: Merge images
         run: |
           docker manifest create $IMAGE --amend $IMAGE_AMD64 --amend $IMAGE_ARM64
@@ -106,6 +90,6 @@ jobs:
           docker manifest annotate $IMAGE $IMAGE_ARM64  --os linux --arch arm64
           docker manifest push $IMAGE
         env:
-          IMAGE_AMD64: ${{format('{0}.dkr.ecr.{1}.{2}:amd64-v0.2.1-test', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo)}}
-          IMAGE_ARM64: ${{format('{0}.dkr.ecr.{1}.{2}:arm64-v0.2.1-test', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo)}}
-          IMAGE: ${{format('{0}.dkr.ecr.{1}.{2}:v0.2.1-test', secrets.AWS_ACCOUNT_ID, secrets.AWS_REGION, matrix.repo)}}
+          IMAGE_AMD64: ${{format('{0}:amd64-v0.2.1-test', matrix.repo)}}
+          IMAGE_ARM64: ${{format('{0}:arm64-v0.2.1-test', matrix.repo)}}
+          IMAGE: ${{format('{0}:v0.2.1-test', matrix.repo)}}
