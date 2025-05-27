@@ -1,0 +1,51 @@
+version: 2
+project_name: spiffe-enable
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+builds:
+  - id: spiffe-enable
+    binary: spiffe-enable
+    main: ./cmd/manager
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}} -X main.date={{.Date}}
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: tar.gz
+    files:
+      - LICENSE.md
+      - README.md
+
+checksum:
+  name_template: '{{ .ProjectName }}_{{ .Version }}_checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - 'Merge pull request'
+      - 'Merge branch'
+
+kos:
+  - repositories: 
+    - ghcr.io/cofide/spiffe-enable
+    tags:
+      - "{{.Version}}"
+      - latest
+    bare: true
+    preserve_import_paths: false
+    platforms:
+      - linux/amd64
+      - linux/arm64
