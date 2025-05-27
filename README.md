@@ -20,8 +20,8 @@ The modes that are currently available:
 
 |  Mode     | Description |
 | --------- | :--- |
-| `helper`  | A `spiffe-helper` sidecar container will be injected |
-| `proxy`   | An Envoy sidecar container will be injected. Note: this is to be used in conjuction with [Cofide's Connect Agent](#production-use-cases) |
+| `helper`  | A `spiffe-helper` sidecar container will be injected to retrieve and automatically renew the SVID and bundle. |
+| `proxy`   | An Envoy sidecar container will be injected. Note: this is used in conjuction with [Cofide's Connect Agent](#production-use-cases) |
 
 ### Debug UI
 
@@ -40,7 +40,12 @@ You can now browse to `http://localhost:8080` to use the UI.
 `spiffe-enable` is a Kubernetes mutating admission webhook. The easiest method of installation in a cluster is to use the [Helm chart](https://github.com/cofide/helm-charts) provided by Cofide:
 
 ```sh
-helm install
+helm repo add cofide https://charts.cofide.dev
+helm install \
+  spiffe-enable cofide/spiffe-enable \
+  --namespace cofide \
+  --create-namespace \
+  --version v0.1.0 \
 ```
 
 ## Development
