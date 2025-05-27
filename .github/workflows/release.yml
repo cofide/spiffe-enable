@@ -80,6 +80,8 @@ jobs:
       matrix:
         include:
           - repo: amazonaws.com/cofide/spiffe-enable
+          - repo: amazonaws.com/cofide/spiffe-enable-init
+          - repo: amazonaws.com/cofide/spiffe-enable-ui
     steps:
       - name: Checkout
         uses: actions/checkout@v4
