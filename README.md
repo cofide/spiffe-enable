@@ -1,6 +1,6 @@
 # spiffe-enable: enabling SPIFFE for Kubernetes workloads
 
-`spiffe-enable` is a Kubernetes admission webhook to auto-inject components that enable SPIFFE for workloads, including applications that are not SPIFFE-native. The purpose of the project is to provide seamless automation and easily onboard workloads to a SPIFFE-enabled environment (eg [SPIRE](https://github.com/spiffe/spire) via [cofidectl](https://github.com/cofide/cofidectl/) or [Cofide's Connect](#production-use-cases)) platform, using components, including:
+`spiffe-enable` is a Kubernetes admission webhook to auto-inject components that enable SPIFFE for workloads, including applications that are not SPIFFE-native. The purpose of the project is to provide seamless automation and easily onboard workloads to a SPIFFE-enabled environment (eg [SPIRE](https://github.com/spiffe/spire) via [cofidectl](https://github.com/cofide/cofidectl/) or [Cofide's Connect](#production-use-cases) platform), using components, including:
 
 - [spiffe-helper](https://github.com/spiffe/spiffe-helper)
 - [Envoy proxy](https://github.com/envoyproxy/envoy)
@@ -19,7 +19,7 @@ The modes that are currently available:
 
 |  Mode     | Description |
 | --------- | :--- |
-| `csi`  |  A [SPIFFE CSI](https://github.com/spiffe/spiffe-csi) volume is injected and mounted to all containers, and the `SPIFFE_ENDPOINT_SOCKET` environment variable is set. |
+| `csi`  |  A [SPIFFE CSI](https://github.com/spiffe/spiffe-csi) volume is injected and mounted to all application containers (i.e., those in `spec.containers`), and the `SPIFFE_ENDPOINT_SOCKET` environment variable is set in them. |
 | `helper`  | A `spiffe-helper` sidecar container will be injected to retrieve and automatically renew the SVID and bundle. `csi` mode is implicitly enabled. |
 | `proxy`   | An Envoy sidecar container will be injected. `csi` mode is implicitly enabled. Note: this is used in conjuction with [Cofide's Connect Agent](#production-use-cases) |
 
