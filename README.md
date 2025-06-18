@@ -1,10 +1,10 @@
 # spiffe-enable: enabling SPIFFE for Kubernetes workloads
 
-`spiffe-enable` is a Kubernetes admission webhook to auto-inject components that enable SPIFFE for workloads, including application workloads that are not SPIFFE-native. The purpose of the project is to provide seamless automation and easily onboard workloads to a SPIFFE-enabled enviroment (eg [SPIRE](https://github.com/spiffe/spire) or [Cofide's Connect](#production-use-cases)) using components, including:
+`spiffe-enable` is a Kubernetes admission webhook to auto-inject components that enable SPIFFE for workloads, including applications that are not SPIFFE-native. The purpose of the project is to provide seamless automation and easily onboard workloads to a SPIFFE-enabled environment (eg [SPIRE](https://github.com/spiffe/spire) via [cofidectl](https://github.com/cofide/cofidectl/) or [Cofide's Connect](#production-use-cases)) platform, using components, including:
 
 - [spiffe-helper](https://github.com/spiffe/spiffe-helper)
 - [Envoy proxy](https://github.com/envoyproxy/envoy)
-- A `spiffe-enable` UI to debug a workload's credentials
+- A `spiffe-enable` UI to debug a workload's SVID credentials
 
 ## How to use
 
@@ -13,13 +13,13 @@
 In order to use the admission webhook:
 
 - the workload's namespace requires a `spiffe.cofide.io/enabled: true` label to 'opt in' to the auto-injection;
-- each pod in the namespace will see a SPIFFE CSI volume and environment variable automatically injected on admission;
-- additional components can also be auto-injected on a per-pod basis using the `spiffe.cofide.io/inject` annotation in a comma-delimited list.
+- components are auto-injected on a per-pod basis using the `spiffe.cofide.io/inject` annotation (value is a comma-delimited list of components).
 
 The modes that are currently available:
 
 |  Mode     | Description |
 | --------- | :--- |
+| `csi`  |  A [SPIFFE CSI](https://github.com/spiffe/spiffe-csi) volume is injected and mounted to all containers, and the `SPIFFE_ENDPOINT_SOCKET` environment variable is set. |
 | `helper`  | A `spiffe-helper` sidecar container will be injected to retrieve and automatically renew the SVID and bundle. |
 | `proxy`   | An Envoy sidecar container will be injected. Note: this is used in conjuction with [Cofide's Connect Agent](#production-use-cases) |
 
@@ -37,7 +37,9 @@ You can now browse to `http://localhost:8080` to use the UI.
 
 ## Installation
 
-`spiffe-enable` is a Kubernetes mutating admission webhook. The easiest method of installation in a cluster is to use the [Helm chart](https://github.com/cofide/helm-charts) provided by Cofide:
+`spiffe-enable` is a Kubernetes mutating admission webhook. It is used with a Kubernetes cluster in which there is a SPIFFE-compliant workload identity provider. The easiest method to enable SPIFFE in a cluster is to use [cofidectl](https://github.com/cofide/cofidectl/), Cofide's CLI for Kubernetes workload identity. Cofide also provides [Connect](#production-use-cases)) for production use cases.
+
+To install `spiffe-enable` in a cluster, it is recommended to use the [Helm chart](https://github.com/cofide/helm-charts) provided by Cofide:
 
 ```sh
 helm repo add cofide https://charts.cofide.dev
