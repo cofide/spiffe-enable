@@ -26,7 +26,11 @@ import (
 
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
 	RegisterFailHandler(Fail)
-	fmt.Fprintf(GinkgoWriter, "Starting cofide-webhook suite\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "Starting cofide-webhook suite\n")
 	RunSpecs(t, "e2e suite")
 }

@@ -66,7 +66,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to create workload API client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Printf("Error closing workload API client: %v", err)
+		}
+	}()
 
 	subTmplFS, err := fs.Sub(tmplAssets, "templates")
 	if err != nil {
@@ -78,7 +82,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to open template file: %v", err)
 	}
-	defer tmplFile.Close()
+	defer func() {
+		if err := tmplFile.Close(); err != nil {
+			log.Printf("Error closing template file: %v", err)
+		}
+	}()
 
 	// Read the content of the template file
 	tmplBytes, err := io.ReadAll(tmplFile)
@@ -160,7 +168,7 @@ func main() {
 }
 
 func loadSVIDCertificates(ctx context.Context, client *workloadapi.Client) ([]Certificate, error) {
-	var certificates []Certificate
+	certificates := []Certificate{}
 
 	svids, err := client.FetchX509SVIDs(ctx)
 	if err != nil {
@@ -184,7 +192,9 @@ func loadSVIDCertificates(ctx context.Context, client *workloadapi.Client) ([]Ce
 	return certificates, nil
 }
 
-func loadCACertificates(ctx context.Context, client *workloadapi.Client, ownTrustDomainID string) ([]Certificate, []string, error) {
+func loadCACertificates(
+	ctx context.Context, client *workloadapi.Client, ownTrustDomainID string,
+) ([]Certificate, []string, error) {
 	var certificates []Certificate
 	var uniqueTrustDomainIDs []string
 
