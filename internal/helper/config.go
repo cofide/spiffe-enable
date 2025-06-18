@@ -86,9 +86,7 @@ func NewSPIFFEHelper(params SPIFFEHelperConfigParams) (*SPIFFEHelper, error) {
 		return nil, fmt.Errorf("missing spiffe-helper configuration parameters")
 	}
 
-	spiffeHelperCfg := new(SPIFFEHelperConfig)
-
-	spiffeHelperCfg = &SPIFFEHelperConfig{
+	spiffeHelperCfg := &SPIFFEHelperConfig{
 		CertDir:                  params.CertPath,
 		DaemonMode:               BoolPtr(true),
 		IncludeFederatedDomains:  true,
