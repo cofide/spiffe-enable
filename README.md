@@ -20,8 +20,8 @@ The modes that are currently available:
 |  Mode     | Description |
 | --------- | :--- |
 | `csi`  |  A [SPIFFE CSI](https://github.com/spiffe/spiffe-csi) volume is injected and mounted to all containers, and the `SPIFFE_ENDPOINT_SOCKET` environment variable is set. |
-| `helper`  | A `spiffe-helper` sidecar container will be injected to retrieve and automatically renew the SVID and bundle. |
-| `proxy`   | An Envoy sidecar container will be injected. Note: this is used in conjuction with [Cofide's Connect Agent](#production-use-cases) |
+| `helper`  | A `spiffe-helper` sidecar container will be injected to retrieve and automatically renew the SVID and bundle. `csi` mode is implicitly enabled. |
+| `proxy`   | An Envoy sidecar container will be injected. `csi` mode is implicitly enabled. Note: this is used in conjuction with [Cofide's Connect Agent](#production-use-cases) |
 
 ### Debug UI
 
