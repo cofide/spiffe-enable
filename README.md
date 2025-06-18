@@ -37,7 +37,7 @@ You can now browse to `http://localhost:8080` to use the UI.
 
 ## Installation
 
-`spiffe-enable` is a Kubernetes mutating admission webhook. It is used with a Kubernetes cluster in which there is a SPIFFE-compliant workload identity provider. The easiest method to enable SPIFFE in a cluster is to use [cofidectl](https://github.com/cofide/cofidectl/), Cofide's CLI for Kubernetes workload identity. Cofide also provides [Connect](#production-use-cases)) for production use cases.
+`spiffe-enable` is a Kubernetes mutating admission webhook. It is used with a Kubernetes cluster in which there is a SPIFFE-compliant workload identity provider. The easiest method to enable SPIFFE in a cluster is to use [cofidectl](https://github.com/cofide/cofidectl/), Cofide's CLI for Kubernetes workload identity. Cofide also provides [Connect](#production-use-cases) for production use cases.
 
 To install `spiffe-enable` in a cluster, it is recommended to use the [Helm chart](https://github.com/cofide/helm-charts) provided by Cofide:
 
