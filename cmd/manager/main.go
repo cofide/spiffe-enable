@@ -83,7 +83,7 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "a2600108.cofide.io",
+		LeaderElectionID:       "spiffe-enable.cofide.io",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
