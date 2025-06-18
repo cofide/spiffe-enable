@@ -280,6 +280,40 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 				assert.Len(t, mutatedPod.Spec.Volumes, 1, "CSI Volume should not be duplicated")
 			},
 		},
+		{
+			name:           "spiffe.cofide.io/inject: csi, CSI volume already exists, unmounted",
+			podAnnotations: map[string]string{constants.InjectAnnotation: constants.InjectCSIVolume},
+			initialPod: func() *corev1.Pod {
+				p := basePod()
+				p.Spec.Volumes = append(p.Spec.Volumes, workload.GetSPIFFEVolume())
+				return p
+			},
+			expectedAllowed: true,
+			expectedPatched: true,
+			validatePod: func(t *testing.T, mutatedPod *corev1.Pod) {
+				assert.Len(t, mutatedPod.Spec.Volumes, 1, "CSI Volume should not be duplicated")
+
+				// Ensure the CSI volume is mounted into the container
+				require.Len(t, mutatedPod.Spec.Containers, 1)
+				appContainer := mutatedPod.Spec.Containers[0]
+				assert.Equal(t, "app-container", appContainer.Name)
+				require.Len(t, appContainer.VolumeMounts, 1)
+				assert.Equal(t, constants.SPIFFEWLVolume, appContainer.VolumeMounts[0].Name)
+				assert.Equal(t, constants.SPIFFEWLMountPath, appContainer.VolumeMounts[0].MountPath)
+				assert.True(t, appContainer.VolumeMounts[0].ReadOnly)
+
+				// Ensure the environment variable is set
+				foundEnv := false
+				for _, env := range appContainer.Env {
+					if env.Name == constants.SPIFFEWLSocketEnvName {
+						assert.Equal(t, constants.SPIFFEWLSocket, env.Value)
+						foundEnv = true
+						break
+					}
+				}
+				assert.True(t, foundEnv, "SPIFFE_ENDPOINT_SOCKET env var not found")
+			},
+		},
 		// TODO: Add tests for idempotency of helper and proxy components if they already exist.
 		// TODO: Add test for existing CSI volume mount with different ReadOnly (should be updated by ensureCSIVolumeMount)
 	}
