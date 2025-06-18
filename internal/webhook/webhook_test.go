@@ -81,30 +81,23 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 		validatePod     func(t *testing.T, mutatedPod *corev1.Pod)
 	}{
 		{
-			name:            "No annotations, pod unchanged",
+			name:            "No pod annotations; no injection",
 			podAnnotations:  map[string]string{},
-			initialPod:      basePod,
-			expectedAllowed: true,
-			expectedPatched: false, // No patch expected if no changes
-			validatePod: func(t *testing.T, mutatedPod *corev1.Pod) {
-				assert.Equal(t, 1, len(mutatedPod.Spec.Containers))
-				assert.Equal(t, 0, len(mutatedPod.Spec.Volumes))
-			},
-		},
-		{
-			name:            "spiffe.cofide.io/enabled: false, pod unchanged",
-			podAnnotations:  map[string]string{constants.EnabledAnnotation: "false"},
 			initialPod:      basePod,
 			expectedAllowed: true,
 			expectedPatched: false,
 			validatePod: func(t *testing.T, mutatedPod *corev1.Pod) {
-				assert.Equal(t, 1, len(mutatedPod.Spec.Containers))
-				assert.Equal(t, 0, len(mutatedPod.Spec.Volumes))
+				require.Len(t, mutatedPod.Spec.Volumes, 0)
+				require.Len(t, mutatedPod.Spec.Containers, 1) // app
+				require.Len(t, mutatedPod.Spec.InitContainers, 0)
+				appContainer := mutatedPod.Spec.Containers[0]
+				assert.Equal(t, "app-container", appContainer.Name)
+				require.Len(t, appContainer.VolumeMounts, 0)
 			},
 		},
 		{
-			name:            "spiffe.cofide.io/enabled: true, basic injection (CSI volume, mount, env)",
-			podAnnotations:  map[string]string{constants.EnabledAnnotation: "true"},
+			name:            "spiffe.cofide.io/inject: csi",
+			podAnnotations:  map[string]string{constants.InjectAnnotation: constants.InjectCSIVolume},
 			initialPod:      basePod,
 			expectedAllowed: true,
 			expectedPatched: true,
@@ -134,8 +127,8 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			},
 		},
 		{
-			name:            "spiffe.cofide.io/enabled: true, spiffe.cofide.io/debug: true",
-			podAnnotations:  map[string]string{constants.EnabledAnnotation: "true", constants.DebugAnnotation: "true"},
+			name:            "spiffe.cofide.io/debug: true",
+			podAnnotations:  map[string]string{constants.DebugAnnotation: "true"},
 			initialPod:      basePod,
 			expectedAllowed: true,
 			expectedPatched: true,
@@ -159,8 +152,8 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			},
 		},
 		{
-			name:            "spiffe.cofide.io/enabled: true, inject: helper",
-			podAnnotations:  map[string]string{constants.EnabledAnnotation: "true", constants.InjectAnnotation: constants.InjectAnnotationHelper},
+			name:            "spiffe.cofide.io/inject: helper",
+			podAnnotations:  map[string]string{constants.InjectAnnotation: constants.InjectAnnotationHelper},
 			initialPod:      basePod,
 			expectedAllowed: true,
 			expectedPatched: true,
@@ -187,7 +180,7 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 
 				// Helper Sidecar Container
 				foundHelperSidecar := false
-				for _, c := range mutatedPod.Spec.Containers {
+				for _, c := range mutatedPod.Spec.InitContainers {
 					if c.Name == helper.SPIFFEHelperSidecarContainerName {
 						foundHelperSidecar = true
 						assert.Equal(t, helper.SPIFFEHelperImage, c.Image)
@@ -197,12 +190,14 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 					}
 				}
 				assert.True(t, foundHelperSidecar, "SPIFFE Helper sidecar container not found")
-				assert.Len(t, mutatedPod.Spec.Containers, 2) // app + helper
+
+				assert.Len(t, mutatedPod.Spec.Containers, 1)     // app
+				assert.Len(t, mutatedPod.Spec.InitContainers, 2) // init + helper
 			},
 		},
 		{
-			name:            "spiffe.cofide.io/enabled: true, inject: proxy",
-			podAnnotations:  map[string]string{constants.EnabledAnnotation: "true", constants.InjectAnnotation: constants.InjectAnnotationProxy},
+			name:            "spiffe.cofide.io/inject: proxy",
+			podAnnotations:  map[string]string{constants.InjectAnnotation: constants.InjectAnnotationProxy},
 			initialPod:      basePod,
 			expectedAllowed: true,
 			expectedPatched: true,
@@ -249,19 +244,19 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			},
 		},
 		{
-			name:            "spiffe.cofide.io/enabled: true, inject: helper,proxy",
-			podAnnotations:  map[string]string{constants.EnabledAnnotation: "true", constants.InjectAnnotation: constants.InjectAnnotationHelper + "," + constants.InjectAnnotationProxy},
+			name:            "spiffe.cofide.io/inject: helper,proxy",
+			podAnnotations:  map[string]string{constants.InjectAnnotation: constants.InjectAnnotationHelper + "," + constants.InjectAnnotationProxy},
 			initialPod:      basePod,
 			expectedAllowed: true,
 			expectedPatched: true,
 			validatePod: func(t *testing.T, mutatedPod *corev1.Pod) {
-				assert.Len(t, mutatedPod.Spec.Containers, 3)     // app + helper + proxy
-				assert.Len(t, mutatedPod.Spec.InitContainers, 2) // helper-init + proxy-init
+				assert.Len(t, mutatedPod.Spec.Containers, 2)     // app + proxy
+				assert.Len(t, mutatedPod.Spec.InitContainers, 3) // helper-init + helper + proxy-init
 			},
 		},
 		{
-			name:            "spiffe.cofide.io/enabled: true, inject: invalid_mode",
-			podAnnotations:  map[string]string{constants.EnabledAnnotation: "true", constants.InjectAnnotation: "invalid_mode"},
+			name:            "spiffe.cofide.io/inject: invalid_mode",
+			podAnnotations:  map[string]string{constants.InjectAnnotation: "invalid_mode"},
 			initialPod:      basePod,
 			expectedAllowed: false, // Denied
 			expectedPatched: false,
@@ -272,15 +267,15 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			validatePod: nil,
 		},
 		{
-			name:           "spiffe.cofide.io/enabled: true, CSI volume already exists",
-			podAnnotations: map[string]string{constants.EnabledAnnotation: "true"},
+			name:           "No pod annotation, CSI volume already exists",
+			podAnnotations: map[string]string{},
 			initialPod: func() *corev1.Pod {
 				p := basePod()
 				p.Spec.Volumes = append(p.Spec.Volumes, workload.GetSPIFFEVolume())
 				return p
 			},
 			expectedAllowed: true,
-			expectedPatched: true,
+			expectedPatched: false,
 			validatePod: func(t *testing.T, mutatedPod *corev1.Pod) {
 				assert.Len(t, mutatedPod.Spec.Volumes, 1, "CSI Volume should not be duplicated")
 			},

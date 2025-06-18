@@ -50,21 +50,13 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 
 	logger := a.Log.WithValues("podNamespace", pod.Namespace, "podName", pod.Name, "request", req.UID)
 
-	if pod.Annotations == nil || pod.Annotations[constants.EnabledAnnotation] != "true" {
-		logger.Info("Skipping all injections, annotation not set or disabled", "annotation", constants.EnabledAnnotation)
-		return admission.Allowed("SPIFFE injection not requested")
-	}
-
-	// Add a CSI volume to the pod for the SPIFFE Workload API
-	if !workload.VolumeExists(pod, constants.SPIFFEWLVolume) {
-		logger.Info("Adding SPIFFE CSI volume", "volumeName", constants.SPIFFEWLVolume)
-		pod.Spec.Volumes = append(pod.Spec.Volumes, workload.GetSPIFFEVolume())
-	}
-
 	// Check for a debug annotation
 	debugAnnotationValue, debugAnnotationExists := pod.Annotations[constants.DebugAnnotation]
 
 	if debugAnnotationExists && debugAnnotationValue == "true" {
+		// Ensure the CSI volume is injected and mounted to containers
+		ensureCSIVolumeAndMount(pod, logger)
+
 		if !workload.ContainerExists(pod.Spec.Containers, constants.DebugUIContainerName) {
 			logger.Info("Adding SPIFFE Enable debug UI container", "containerName", constants.DebugUIContainerName)
 			debugSidecar := corev1.Container{
@@ -81,21 +73,13 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		}
 	}
 
-	// Process each (standard) container in the pod
-	for i := range pod.Spec.Containers {
-		container := &pod.Spec.Containers[i]
-		// Add CSI volume mounts
-		ensureCSIVolumeMount(container, workload.GetSPIFFEVolumeMount(), logger)
-		// Add SPIFFE socket environment variable
-		ensureEnvVar(container, workload.GetSPIFFEEnvVar())
-	}
-
 	// Check for an inject annotation and process based on the value
 	injectAnnotationValue, injectAnnotationExists := pod.Annotations[constants.InjectAnnotation]
 
 	allowedModes := map[string]bool{
 		constants.InjectAnnotationHelper: true,
 		constants.InjectAnnotationProxy:  true,
+		constants.InjectCSIVolume:        true,
 	}
 
 	var invalidModes []string
@@ -128,7 +112,14 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		// Now iterate the injections and apply
 		for _, mode := range toInject {
 			switch mode {
+			case constants.InjectCSIVolume:
+				// Ensure the CSI volume is injected and mounted to containers
+				ensureCSIVolumeAndMount(pod, logger)
+
 			case constants.InjectAnnotationProxy:
+				// Ensure the CSI volume is injected and mounted to containers
+				ensureCSIVolumeAndMount(pod, logger)
+
 				// Generate the Envoy configuration
 				configParams := proxy.EnvoyConfigParams{
 					NodeID:          "node",
@@ -163,6 +154,9 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 				}
 
 			case constants.InjectAnnotationHelper:
+				// Ensure the CSI volume is injected and mounted to containers
+				ensureCSIVolumeAndMount(pod, logger)
+
 				// Inject a spiffe-helper sidecar container
 				logger.Info("Applying 'helper' mode mutations")
 
@@ -237,6 +231,23 @@ func getKeys(m map[string]bool) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+func ensureCSIVolumeAndMount(pod *corev1.Pod, logger logr.Logger) {
+	// Add a CSI volume to the pod for the SPIFFE Workload API
+	if !workload.VolumeExists(pod, constants.SPIFFEWLVolume) {
+		logger.Info("Adding SPIFFE CSI volume", "volumeName", constants.SPIFFEWLVolume)
+		pod.Spec.Volumes = append(pod.Spec.Volumes, workload.GetSPIFFEVolume())
+	}
+
+	// Process each (standard) container in the pod
+	for i := range pod.Spec.Containers {
+		container := &pod.Spec.Containers[i]
+		// Add CSI volume mounts
+		ensureCSIVolumeMount(container, workload.GetSPIFFEVolumeMount(), logger)
+		// Add SPIFFE socket environment variable
+		ensureEnvVar(container, workload.GetSPIFFEEnvVar())
+	}
 }
 
 func ensureCSIVolumeMount(container *corev1.Container, targetMount corev1.VolumeMount, logger logr.Logger) bool {
