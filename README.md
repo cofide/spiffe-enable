@@ -1,6 +1,6 @@
 # spiffe-enable: enabling SPIFFE for Kubernetes workloads
 
-`spiffe-enable` is a Kubernetes admission webhook to auto-inject components that enable SPIFFE for workloads, including applications that are not SPIFFE-native. The purpose of the project is to provide seamless automation and easily onboard workloads to a SPIFFE-enabled environment (eg [SPIRE](https://github.com/spiffe/spire) via [cofidectl](https://github.com/cofide/cofidectl/) or [Cofide's Connect](#production-use-cases)) platform, using components, including:
+`spiffe-enable` is a Kubernetes admission webhook to auto-inject components that enable SPIFFE for workloads, including applications that are not SPIFFE-native. The purpose of the project is to provide seamless automation and easily onboard workloads to a SPIFFE-enabled environment (eg [SPIRE](https://github.com/spiffe/spire) via [cofidectl](https://github.com/cofide/cofidectl/) or [Cofide's Connect](#production-use-cases) platform), using components, including:
 
 - [spiffe-helper](https://github.com/spiffe/spiffe-helper)
 - [Envoy proxy](https://github.com/envoyproxy/envoy)
