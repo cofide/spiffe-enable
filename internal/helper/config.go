@@ -16,7 +16,7 @@ import (
 // Images
 var (
 	SPIFFEHelperImage = "ghcr.io/spiffe/spiffe-helper:0.10.0"
-	InitHelperImage   = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-init:v0.1.0-alpha"
+	InitHelperImage   = "ghcr.io/cofide/spiffe-enable-init:v0.2.1"
 )
 
 // Constants

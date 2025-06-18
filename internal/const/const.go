@@ -38,6 +38,6 @@ const (
 const (
 	DebugUIContainerName = "spiffe-enable-ui"
 	DebugUIPort          = 8000
-	DefaultDebugUIImage  = "010438484483.dkr.ecr.eu-west-1.amazonaws.com/cofide/spiffe-enable-ui:v0.1.0-alpha"
+	DefaultDebugUIImage  = "ghcr.io/cofide/spiffe-enable-ui:v0.2.1"
 	EnvVarUIImage        = "SPIFFE_ENABLE_UI_IMAGE"
 )
