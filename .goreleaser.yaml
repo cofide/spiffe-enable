@@ -36,7 +36,7 @@ builds:
       - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}} -X main.date={{.Date}}
 
 archives:
-  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  - name_template: "{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
     formats: tar.gz
     ids:
       - spiffe-enable
@@ -45,7 +45,7 @@ archives:
       - README.md
 
 checksum:
-  name_template: '{{ .ProjectName }}_{{ .Version }}_checksums.txt'
+  name_template: '{{ .ProjectName }}_{{ .Tag }}_checksums.txt'
 
 changelog:
   sort: asc
@@ -60,7 +60,7 @@ kos:
   - repositories: 
     - ghcr.io/cofide/spiffe-enable
     tags:
-      - "{{.Version}}"
+      - "{{.Tag}}"
       - latest
     bare: true
     preserve_import_paths: false
@@ -78,12 +78,12 @@ dockers:
       - "--platform=linux/arm64/v8"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}-ui"
       - "--label=org.opencontainers.image.description=UI for spiffe-enable"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.version={{ .Tag }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.source=https://github.com/cofide/spiffe-enable"
     image_templates:
-      - "ghcr.io/cofide/spiffe-enable-ui:{{ .Version }}-arm64v8"
+      - "ghcr.io/cofide/spiffe-enable-ui:{{ .Tag }}-arm64v8"
       - "ghcr.io/cofide/spiffe-enable-ui:latest-arm64v8"
 
   - goarch: amd64
@@ -95,12 +95,12 @@ dockers:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}-ui"
       - "--label=org.opencontainers.image.description=UI for spiffe-enable"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.version={{ .Tag }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.source=https://github.com/cofide/spiffe-enable"
     image_templates:
-      - "ghcr.io/cofide/spiffe-enable-ui:{{ .Version }}-amd64"
+      - "ghcr.io/cofide/spiffe-enable-ui:{{ .Tag }}-amd64"
       - "ghcr.io/cofide/spiffe-enable-ui:latest-amd64"
 
   - goarch: arm64
@@ -110,12 +110,12 @@ dockers:
       - "--platform=linux/arm64/v8"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}-init"
       - "--label=org.opencontainers.image.description=Init container for spiffe-enable"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.version={{ .Tag }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.source=https://github.com/cofide/spiffe-enable"
     image_templates:
-      - "ghcr.io/cofide/spiffe-enable-init:{{ .Version }}-arm64v8"
+      - "ghcr.io/cofide/spiffe-enable-init:{{ .Tag }}-arm64v8"
       - "ghcr.io/cofide/spiffe-enable-init:latest-arm64v8"
 
   - goarch: amd64
@@ -125,27 +125,27 @@ dockers:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}-init"
       - "--label=org.opencontainers.image.description=Init container for spiffe-enable"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.version={{ .Tag }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.source=https://github.com/cofide/spiffe-enable"
     image_templates:
-      - "ghcr.io/cofide/spiffe-enable-init:{{ .Version }}-amd64"
+      - "ghcr.io/cofide/spiffe-enable-init:{{ .Tag }}-amd64"
       - "ghcr.io/cofide/spiffe-enable-init:latest-amd64"
 
 docker_manifests:
-  - name_template: "ghcr.io/cofide/spiffe-enable-ui:{{ .Version }}"
+  - name_template: "ghcr.io/cofide/spiffe-enable-ui:{{ .Tag }}"
     image_templates:
-      - "ghcr.io/cofide/spiffe-enable-ui:{{ .Version }}-amd64"
-      - "ghcr.io/cofide/spiffe-enable-ui:{{ .Version }}-arm64v8"
+      - "ghcr.io/cofide/spiffe-enable-ui:{{ .Tag }}-amd64"
+      - "ghcr.io/cofide/spiffe-enable-ui:{{ .Tag }}-arm64v8"
   - name_template: "ghcr.io/cofide/spiffe-enable-ui:latest"
     image_templates:
       - "ghcr.io/cofide/spiffe-enable-ui:latest-amd64"
       - "ghcr.io/cofide/spiffe-enable-ui:latest-arm64v8"
-  - name_template: "ghcr.io/cofide/spiffe-enable-init:{{ .Version }}"
+  - name_template: "ghcr.io/cofide/spiffe-enable-init:{{ .Tag }}"
     image_templates:
-      - "ghcr.io/cofide/spiffe-enable-init:{{ .Version }}-amd64"
-      - "ghcr.io/cofide/spiffe-enable-init:{{ .Version }}-arm64v8"
+      - "ghcr.io/cofide/spiffe-enable-init:{{ .Tag }}-amd64"
+      - "ghcr.io/cofide/spiffe-enable-init:{{ .Tag }}-arm64v8"
   - name_template: "ghcr.io/cofide/spiffe-enable-init:latest"
     image_templates:
       - "ghcr.io/cofide/spiffe-enable-init:latest-amd64"
