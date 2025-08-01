@@ -39,16 +39,19 @@ You can now browse to `http://localhost:8080` to use the UI.
 
 `spiffe-enable` is a Kubernetes mutating admission webhook. It is used with a Kubernetes cluster in which there is a SPIFFE-compliant workload identity provider. The easiest method to enable SPIFFE in a cluster is to use [cofidectl](https://github.com/cofide/cofidectl/), Cofide's CLI for Kubernetes workload identity. Cofide also provides [Connect](#production-use-cases) for production use cases.
 
-To install `spiffe-enable` in a cluster, it is recommended to use the [Helm chart](https://github.com/cofide/helm-charts) provided by Cofide:
+To install `spiffe-enable` in a cluster, it is recommended to use the [Helm chart](https://github.com/cofide/helm-charts) provided by Cofide.
 
 ```sh
 helm repo add cofide https://charts.cofide.dev
 helm install \
   spiffe-enable cofide/spiffe-enable \
   --namespace cofide \
-  --create-namespace \
-  --version v0.1.0
+  --create-namespace
 ```
+
+### Dependencies
+
+`spiffe-enable` depends on [cert-manager](https://github.com/cert-manager/cert-manager) to issue TLS certificates to secure the webhook. Ensure cert-manager is installed, following the [installation documentation](https://cert-manager.io/docs/installation/). By default, `spiffe-enable` assumes a self-signed `Issuer` called `selfsigned` but this is configurable in the Helm chart ([values](https://github.com/cofide/helm-charts/blob/main/charts/spiffe-enable/values.yaml)).
 
 ## Development
 
