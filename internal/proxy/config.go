@@ -208,9 +208,11 @@ func (e *Envoy) GetInitContainer() corev1.Container {
 		VolumeMounts:    []corev1.VolumeMount{{Name: EnvoyConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
 		SecurityContext: &corev1.SecurityContext{
 			Capabilities: &corev1.Capabilities{
-				Add: []corev1.Capability{"NET_ADMIN"}, // # NET_ADMIN is required to apply nftables rules
+				Add: []corev1.Capability{"NET_ADMIN", "NET_RAW"}, // # Additional capabilities required to apply nftables rules
+
 			},
-			RunAsUser: ptr.To(int64(0)), // # Run as root in order to apply nftables rules
+			RunAsUser:    ptr.To(int64(0)), // # Run as root in order to apply nftables rules
+			RunAsNonRoot: ptr.To(false),
 		},
 	}
 }
