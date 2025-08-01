@@ -25,7 +25,7 @@ const (
 // Cofide Agent
 const (
 	AgentXDSPort    = 18001
-	AgentXDSService = "cofide-agent.cofide.svc.cluster.local"
+	AgentXDSService = "cofide-agent-xds.cofide.svc.cluster.local"
 )
 
 // SPIFFE Enable
