@@ -47,7 +47,7 @@ helm install \
   spiffe-enable cofide/spiffe-enable \
   --namespace cofide \
   --create-namespace \
-  --version v0.1.0
+  --version v0.1.3
 ```
 
 ## Development
