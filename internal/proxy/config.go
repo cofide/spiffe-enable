@@ -45,22 +45,22 @@ fi
 # and redirect to a DNS proxy provided by Envoy
 cat <<EOF > /tmp/dns_redirect.nft
 table inet envoy_proxy {
-    chain envoy_output {
+	chain envoy_output {
         type nat hook output priority dstnat; policy accept;
 
-        # Skip all Envoy traffic first
+        # Skip Envoy's own traffic
         meta skuid == {{.EnvoyUID}} return
 
-        # DNS redirection (takes precedence over TCP rules)
+        # DNS redirection
         udp dport 53 counter redirect to :{{.DNSProxyPort}} comment "DNS UDP to Envoy"
         tcp dport 53 counter redirect to :{{.DNSProxyPort}} comment "DNS TCP to Envoy"
 
         # Skip traffic already going to Envoy port
         tcp dport {{.EnvoyPort}} return
 
-        # Redirect loopback TCP traffic
-        tcp ip daddr 127.0.0.1/8 counter redirect to :{{.EnvoyPort}} comment "Loopback IPv4 to Envoy"
-        tcp ip6 daddr ::1/128 counter redirect to :{{.EnvoyPort}} comment "Loopback IPv6 to Envoy"
+        # Redirect loopback TCP traffic (using tcp dport range to match all TCP)
+        ip daddr 127.0.0.1/8 tcp dport 1-65535 counter redirect to :{{.EnvoyPort}} comment "Loopback IPv4 to Envoy"
+        ip6 daddr ::1/128 tcp dport 1-65535 counter redirect to :{{.EnvoyPort}} comment "Loopback IPv6 to Envoy"
     }
 }
 EOF
