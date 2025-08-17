@@ -37,19 +37,37 @@ fi
 # and redirect to a DNS proxy provided by Envoy
 cat <<EOF > /tmp/dns_redirect.nft
 table inet envoy_dns_interception {
-    chain redirect_dns_output {
-        type nat hook output priority dstnat; policy accept;
-
-        # Rule to accept DNS from skuid 101 (Envoy) - UDP
-        meta skuid == 101 udp dport 53 counter accept comment "Accept Envoy UDP DNS"
-
-        # Rule to accept DNS from skuid 101 (Envoy) - TCP
-        meta skuid == 101 tcp dport 53 counter accept comment "Accept Envoy TCP DNS"
+    chain redirect_dns {
+        # Don't redirect DNS that originates from Envoy
+        meta skuid == 101 return
 
         # Rules to redirect DNS
-        meta skuid != 101 udp dport 53 counter redirect to :15053 comment "Webhook: UDP DNS to Envoy"
-        meta skuid != 101 tcp dport 53 counter redirect to :15053 comment "Webhook: TCP DNS to Envoy"
+        udp dport 53 counter redirect to :15053 comment "Webhook: UDP DNS to Envoy"
+        tcp dport 53 counter redirect to :15053 comment "Webhook: TCP DNS to Envoy"
     }
+
+	chain redirect_tcp {
+		# Don't redirect traffic from Envoy itself
+		meta skuid == 101 return
+
+		# Don't redirect traffic already going to Envoy's listener port
+		tcp dport ${ENVOY_PORT} return
+
+		# Redirect outbound TCP traffic *only if its destination is a loopback address*
+		ip daddr 127.0.0.1/8 tcp redirect to :${ENVOY_PORT}
+		ip6 daddr ::1/128 tcp redirect to :${ENVOY_PORT}
+	}
+
+	chain envoy_output {
+		type nat hook output priority dstnat; policy accept;
+
+		# Jump to the DNS chain for DNS traffic
+		udp dport 53 jump redirect_dns
+		tcp dport 53 jump redirect_dns
+
+		# Jump to the TCP chain for all other TCP traffic
+		tcp jump redirect_tcp
+	}
 }
 EOF
 
