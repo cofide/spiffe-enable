@@ -25,7 +25,15 @@ const (
 	EnvoyConfigContentEnvVar     = "ENVOY_CONFIG_CONTENT"
 	EnvoyConfigInitContainerName = "inject-envoy-config"
 	EnvoyPort                    = 10000
+	EnvoyUID                     = 101
+	DNSProxyPort                 = 15053
 )
+
+type NftablesParams struct {
+	EnvoyUID     int
+	EnvoyPort    int
+	DNSProxyPort int
+}
 
 const nftablesSetupScript = `
 if ! command -v nft &> /dev/null; then
@@ -39,23 +47,23 @@ cat <<EOF > /tmp/dns_redirect.nft
 table inet envoy_dns_interception {
     chain redirect_dns {
         # Don't redirect DNS that originates from Envoy
-        meta skuid == 101 return
+        meta skuid == {{.EnvoyUID}} return
 
         # Rules to redirect DNS
-        udp dport 53 counter redirect to :15053 comment "Webhook: UDP DNS to Envoy"
-        tcp dport 53 counter redirect to :15053 comment "Webhook: TCP DNS to Envoy"
+        udp dport 53 counter redirect to :{{.DNSProxyPort}} comment "Webhook: UDP DNS to Envoy"
+        tcp dport 53 counter redirect to :{{.DNSProxyPort}} comment "Webhook: TCP DNS to Envoy"
     }
 
 	chain redirect_tcp {
 		# Don't redirect traffic from Envoy itself
-		meta skuid == 101 return
+		meta skuid == {{.EnvoyUID}} return
 
 		# Don't redirect traffic already going to Envoy's listener port
-		tcp dport ${ENVOY_PORT} return
+		tcp dport {{.EnvoyPort}} return
 
 		# Redirect outbound TCP traffic *only if its destination is a loopback address*
-		ip daddr 127.0.0.1/8 tcp redirect to :${ENVOY_PORT}
-		ip6 daddr ::1/128 tcp redirect to :${ENVOY_PORT}
+		ip daddr 127.0.0.1/8 tcp redirect to :{{.EnvoyPort}}
+		ip6 daddr ::1/128 tcp redirect to :{{.EnvoyPort}}
 	}
 
 	chain envoy_output {
@@ -180,13 +188,19 @@ func NewEnvoy(params EnvoyConfigParams) (*Envoy, error) {
 		},
 	}
 
+	nftTablesParams := NftablesParams{
+		EnvoyUID:     EnvoyUID,
+		EnvoyPort:    EnvoyPort,
+		DNSProxyPort: DNSProxyPort,
+	}
+
 	tmpl, err := template.New("initScript").Parse(nftablesSetupScript)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse nftables init script template: %w", err)
 	}
 
 	var renderedScript bytes.Buffer
-	if err := tmpl.Execute(&renderedScript, params); err != nil {
+	if err := tmpl.Execute(&renderedScript, nftTablesParams); err != nil {
 		return nil, fmt.Errorf("failed to render nftables init script template with params: %w", err)
 	}
 
