@@ -57,6 +57,7 @@ table inet envoy_proxy {
 
         # Skip traffic already going to Envoy port
         tcp dport {{.EnvoyPort}} return
+        tcp dport 9901 return
 
         # Redirect loopback TCP traffic (using tcp dport range to match all TCP)
         ip daddr 127.0.0.1/8 tcp dport 1-65535 counter redirect to :{{.EnvoyPort}} comment "Loopback IPv4 to Envoy"
@@ -70,7 +71,7 @@ nft -f /tmp/dns_redirect.nft
 echo "nftables DNS redirection rules applied."
 
 echo "Applied rules:"
-nft list table inet envoy_dns_interception
+nft list table inet envoy_proxy
 `
 
 type EnvoyConfigParams struct {
