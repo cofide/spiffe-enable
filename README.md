@@ -46,9 +46,12 @@ helm repo add cofide https://charts.cofide.dev
 helm install \
   spiffe-enable cofide/spiffe-enable \
   --namespace cofide \
-  --create-namespace \
-  --version v0.1.3
+  --create-namespace
 ```
+
+### Dependencies
+
+`spiffe-enable` depends on [cert-manager](https://github.com/cert-manager/cert-manager) to issue TLS certificates to secure the webhook. Ensure cert-manager is installed, following the [installation documentation](https://cert-manager.io/docs/installation/). By default, `spiffe-enable` assumes a self-signed `Issuer` called `selfsigned` but this is configurable in the Helm chart ([values](https://github.com/cofide/helm-charts/blob/main/charts/spiffe-enable/values.yaml)).
 
 ## Development
 
