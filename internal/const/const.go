@@ -26,7 +26,7 @@ const (
 // Cofide Agent
 const (
 	AgentXDSPort    = 18001
-	AgentXDSService = "cofide-agent.cofide.svc.cluster.local"
+	AgentXDSService = "cofide-agent-xds.cofide.svc.cluster.local"
 )
 
 // SPIFFE Enable
@@ -39,6 +39,6 @@ const (
 const (
 	DebugUIContainerName = "spiffe-enable-ui"
 	DebugUIPort          = 8000
-	DefaultDebugUIImage  = "ghcr.io/cofide/spiffe-enable-ui:v0.2.1"
+	DefaultDebugUIImage  = "ghcr.io/cofide/spiffe-enable-ui:v0.3.0"
 	EnvVarUIImage        = "SPIFFE_ENABLE_UI_IMAGE"
 )

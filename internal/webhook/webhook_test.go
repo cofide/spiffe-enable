@@ -104,8 +104,8 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			validatePod: func(t *testing.T, mutatedPod *corev1.Pod) {
 				require.Len(t, mutatedPod.Spec.Volumes, 1)
 				assert.Equal(t, constants.SPIFFEWLVolume, mutatedPod.Spec.Volumes[0].Name)
-				assert.NotNil(t, mutatedPod.Spec.Volumes[0].VolumeSource.CSI)
-				assert.Equal(t, "csi.spiffe.io", mutatedPod.Spec.Volumes[0].VolumeSource.CSI.Driver)
+				assert.NotNil(t, mutatedPod.Spec.Volumes[0].CSI)
+				assert.Equal(t, "csi.spiffe.io", mutatedPod.Spec.Volumes[0].CSI.Driver)
 
 				require.Len(t, mutatedPod.Spec.Containers, 1)
 				appContainer := mutatedPod.Spec.Containers[0]
