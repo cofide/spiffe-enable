@@ -80,7 +80,8 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		constants.InjectAnnotationHelper: true,
 		constants.InjectAnnotationProxy:  true,
 		constants.InjectCSIVolume:        true,
-		constants.AWSProviderAnnotation:  true,
+		constants.ProviderAnnotation:     true,
+		constants.ProviderRoleAnnotation: true,
 	}
 
 	var invalidModes []string
@@ -203,7 +204,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 					pod.Spec.InitContainers = append([]corev1.Container{spiffeHelper.GetInitContainer()}, pod.Spec.InitContainers...)
 				}
 
-			case constants.AWSProviderAnnotation:
+			case constants.ProviderAnnotation:
 				// Ensure the CSI volume is injected and mounted to containers
 				ensureCSIVolumeAndMount(pod, logger)
 
