@@ -2,9 +2,9 @@ package constants
 
 // Pod annotations
 const (
-	InjectAnnotation     = "spiffe.cofide.io/inject"
-	DebugAnnotation      = "spiffe.cofide.io/debug"
-	AWSRoleARNAnnotation = "spiffe.cofide.io/aws-role-arn"
+	InjectAnnotation      = "spiffe.cofide.io/inject"
+	DebugAnnotation       = "spiffe.cofide.io/debug"
+	AWSProviderAnnotation = "spiffe.cofide.io/aws"
 )
 
 // Components that can be injected
