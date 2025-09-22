@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"text/template"
 
+	constants "github.com/cofide/spiffe-enable/internal/const"
 	"github.com/cofide/spiffe-enable/internal/helper"
 	"github.com/cofide/spiffe-enable/internal/workload"
 	corev1 "k8s.io/api/core/v1"
@@ -172,6 +173,7 @@ func NewEnvoy(params EnvoyConfigParams) (*Envoy, error) {
 						},
 					},
 				},
+				getSDSCluster(),
 			},
 		},
 	}
@@ -198,6 +200,33 @@ func NewEnvoy(params EnvoyConfigParams) (*Envoy, error) {
 	}
 
 	return &Envoy{InitScript: renderedScript.String(), Cfg: envoyConfigJSON}, nil
+}
+
+func getSDSCluster() map[string]interface{} {
+	return map[string]interface{}{
+		"name":                   "sds-grpc",
+		"connect_timeout":        "5s",
+		"type":                   "STATIC",
+		"http2_protocol_options": map[string]interface{}{},
+		"load_assignment": map[string]interface{}{
+			"cluster_name": "sds-grpc",
+			"endpoints": []interface{}{
+				map[string]interface{}{
+					"lb_endpoints": []interface{}{
+						map[string]interface{}{
+							"endpoint": map[string]interface{}{
+								"address": map[string]interface{}{
+									"pipe": map[string]interface{}{
+										"path": constants.SPIFFEWLSocketPath,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 func (e *Envoy) GetConfigVolume() corev1.Volume {
