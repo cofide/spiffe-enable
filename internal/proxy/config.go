@@ -8,13 +8,14 @@ import (
 	"text/template"
 
 	"github.com/cofide/spiffe-enable/internal/helper"
+	"github.com/cofide/spiffe-enable/internal/workload"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 )
 
 // Envoy-specific constants
 var (
-	EnvoyImage = "envoyproxy/envoy:v1.33-latest"
+	IstioImage = "docker.io/istio/proxyv2:1.26.4"
 )
 
 const (
@@ -25,7 +26,7 @@ const (
 	EnvoyConfigContentEnvVar     = "ENVOY_CONFIG_CONTENT"
 	EnvoyConfigInitContainerName = "inject-envoy-config"
 	EnvoyPort                    = 10000
-	EnvoyUID                     = 101
+	EnvoyUID                     = 1337
 	DNSProxyPort                 = 15053
 )
 
@@ -241,15 +242,21 @@ func (e *Envoy) GetSidecarContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            EnvoySidecarContainerName,
-		Image:           EnvoyImage,
+		Image:           IstioImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command:         []string{"envoy"},
 		Args:            []string{"-c", configFilePath},
-		VolumeMounts:    []corev1.VolumeMount{{Name: EnvoyConfigVolumeName, MountPath: EnvoyConfigMountPath}},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: EnvoyConfigVolumeName, MountPath: EnvoyConfigMountPath},
+			workload.GetSPIFFEVolumeMount(),
+		},
 		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:    ptr.To(int64(101)), // # Run as non-root user
-			RunAsGroup:   ptr.To(int64(101)), // # Run as non-root group
-			RunAsNonRoot: ptr.To(true),
+			AllowPrivilegeEscalation: ptr.To(false),
+			RunAsUser:                ptr.To(int64(EnvoyUID)), // # Run as non-root user
+			RunAsGroup:               ptr.To(int64(EnvoyUID)), // # Run as non-root group
+			RunAsNonRoot:             ptr.To(true),
+			Privileged:               ptr.To(false),
+			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"all"}},
 		},
 		Ports: []corev1.ContainerPort{
 			{
