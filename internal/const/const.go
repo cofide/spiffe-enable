@@ -2,8 +2,9 @@ package constants
 
 // Pod annotations
 const (
-	InjectAnnotation = "spiffe.cofide.io/inject"
-	DebugAnnotation  = "spiffe.cofide.io/debug"
+	InjectAnnotation        = "spiffe.cofide.io/inject"
+	DebugAnnotation         = "spiffe.cofide.io/debug"
+	EnvoyLogLevelAnnotation = "spiffe.cofide.io/envoy-log-level"
 )
 
 // Components that can be injected
