@@ -91,92 +91,9 @@ type Envoy struct {
 }
 
 func NewEnvoy(params EnvoyConfigParams) (*Envoy, error) {
-	if params.NodeID == "" {
-		params.NodeID = "node"
-	}
-	if params.ClusterName == "" {
-		params.ClusterName = "cluster"
-	}
-	if params.AdminAddress == "" {
-		params.AdminAddress = "127.0.0.1"
-	}
-	if params.AdminPort == 0 {
-		params.AdminPort = 9901
-	}
+	params.setDefaults()
 
-	cfg := map[string]interface{}{
-		"node": map[string]interface{}{
-			"id":      params.NodeID,
-			"cluster": params.ClusterName,
-		},
-		"admin": map[string]interface{}{
-			"address": map[string]interface{}{
-				"socket_address": map[string]interface{}{
-					"address":    params.AdminAddress,
-					"port_value": params.AdminPort,
-				},
-			},
-		},
-		"dynamic_resources": map[string]interface{}{
-			"ads_config": map[string]interface{}{
-				"api_type":              "GRPC",
-				"transport_api_version": "V3",
-				"grpc_services": []interface{}{
-					map[string]interface{}{
-						"envoy_grpc": map[string]interface{}{
-							"cluster_name": "xds_cluster",
-						},
-					},
-				},
-				"set_node_on_first_message_only": true,
-			},
-			"cds_config": map[string]interface{}{
-				"resource_api_version": "V3",
-				"ads":                  map[string]interface{}{},
-			},
-			"lds_config": map[string]interface{}{
-				"resource_api_version": "V3",
-				"ads":                  map[string]interface{}{},
-			},
-		},
-		"static_resources": map[string]interface{}{
-			"clusters": []interface{}{
-				map[string]interface{}{
-					"name":            "xds_cluster",
-					"type":            "LOGICAL_DNS",
-					"connect_timeout": "5s",
-					"typed_extension_protocol_options": map[string]interface{}{
-						"envoy.extensions.upstreams.http.v3.HttpProtocolOptions": map[string]interface{}{
-							"@type": "type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",
-							"explicit_http_config": map[string]interface{}{
-								"http2_protocol_options": map[string]interface{}{},
-							},
-						},
-					},
-					"load_assignment": map[string]interface{}{
-						"cluster_name": "xds_cluster",
-						"endpoints": []interface{}{
-							map[string]interface{}{
-								"lb_endpoints": []interface{}{
-									map[string]interface{}{
-										"endpoint": map[string]interface{}{
-											"address": map[string]interface{}{
-												"socket_address": map[string]interface{}{
-													"address":    params.AgentXDSService,
-													"port_value": params.AgentXDSPort,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				getSDSCluster(),
-			},
-		},
-	}
+	cfg := params.build()
 
 	nftTablesParams := NftablesParams{
 		EnvoyUID:     EnvoyUID,
@@ -196,37 +113,10 @@ func NewEnvoy(params EnvoyConfigParams) (*Envoy, error) {
 
 	envoyConfigJSON, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("error marshalling proxy config to JSON")
+		return nil, fmt.Errorf("error marshalling proxy config to JSON: %w", err)
 	}
 
 	return &Envoy{InitScript: renderedScript.String(), Cfg: envoyConfigJSON}, nil
-}
-
-func getSDSCluster() map[string]interface{} {
-	return map[string]interface{}{
-		"name":                   "sds-grpc",
-		"connect_timeout":        "5s",
-		"type":                   "STATIC",
-		"http2_protocol_options": map[string]interface{}{},
-		"load_assignment": map[string]interface{}{
-			"cluster_name": "sds-grpc",
-			"endpoints": []interface{}{
-				map[string]interface{}{
-					"lb_endpoints": []interface{}{
-						map[string]interface{}{
-							"endpoint": map[string]interface{}{
-								"address": map[string]interface{}{
-									"pipe": map[string]interface{}{
-										"path": constants.SPIFFEWLSocketPath,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
 }
 
 func (e *Envoy) GetConfigVolume() corev1.Volume {
@@ -290,6 +180,124 @@ func (e *Envoy) GetSidecarContainer() corev1.Container {
 		Ports: []corev1.ContainerPort{
 			{
 				ContainerPort: EnvoyPort,
+			},
+		},
+	}
+}
+
+func (p *EnvoyConfigParams) setDefaults() {
+	if p.NodeID == "" {
+		p.NodeID = "node"
+	}
+	if p.ClusterName == "" {
+		p.ClusterName = "cluster"
+	}
+	if p.AdminAddress == "" {
+		p.AdminAddress = "127.0.0.1"
+	}
+	if p.AdminPort == 0 {
+		p.AdminPort = 9901
+	}
+}
+
+func (p *EnvoyConfigParams) build() map[string]interface{} {
+	return map[string]interface{}{
+		"node": map[string]interface{}{
+			"id":      p.NodeID,
+			"cluster": p.ClusterName,
+		},
+		"admin": map[string]interface{}{
+			"address": map[string]interface{}{
+				"socket_address": map[string]interface{}{
+					"address":    p.AdminAddress,
+					"port_value": p.AdminPort,
+				},
+			},
+		},
+		"dynamic_resources": map[string]interface{}{
+			"ads_config": map[string]interface{}{
+				"api_type":              "GRPC",
+				"transport_api_version": "V3",
+				"grpc_services": []interface{}{
+					map[string]interface{}{
+						"envoy_grpc": map[string]interface{}{
+							"cluster_name": "xds_cluster",
+						},
+					},
+				},
+				"set_node_on_first_message_only": true,
+			},
+			"cds_config": map[string]interface{}{
+				"resource_api_version": "V3",
+				"ads":                  map[string]interface{}{},
+			},
+			"lds_config": map[string]interface{}{
+				"resource_api_version": "V3",
+				"ads":                  map[string]interface{}{},
+			},
+		},
+		"static_resources": map[string]interface{}{
+			"clusters": []interface{}{
+				map[string]interface{}{
+					"name":            "xds_cluster",
+					"type":            "LOGICAL_DNS",
+					"connect_timeout": "5s",
+					"typed_extension_protocol_options": map[string]interface{}{
+						"envoy.extensions.upstreams.http.v3.HttpProtocolOptions": map[string]interface{}{
+							"@type": "type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",
+							"explicit_http_config": map[string]interface{}{
+								"http2_protocol_options": map[string]interface{}{},
+							},
+						},
+					},
+					"load_assignment": map[string]interface{}{
+						"cluster_name": "xds_cluster",
+						"endpoints": []interface{}{
+							map[string]interface{}{
+								"lb_endpoints": []interface{}{
+									map[string]interface{}{
+										"endpoint": map[string]interface{}{
+											"address": map[string]interface{}{
+												"socket_address": map[string]interface{}{
+													"address":    p.AgentXDSService,
+													"port_value": p.AgentXDSPort,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				getSDSCluster(),
+			},
+		},
+	}
+}
+
+func getSDSCluster() map[string]interface{} {
+	return map[string]interface{}{
+		"name":                   "sds-grpc",
+		"connect_timeout":        "5s",
+		"type":                   "STATIC",
+		"http2_protocol_options": map[string]interface{}{},
+		"load_assignment": map[string]interface{}{
+			"cluster_name": "sds-grpc",
+			"endpoints": []interface{}{
+				map[string]interface{}{
+					"lb_endpoints": []interface{}{
+						map[string]interface{}{
+							"endpoint": map[string]interface{}{
+								"address": map[string]interface{}{
+									"pipe": map[string]interface{}{
+										"path": constants.SPIFFEWLSocketPath,
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 	}
