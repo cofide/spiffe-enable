@@ -23,6 +23,8 @@ The modes that are currently available:
 | `helper`  | A `spiffe-helper` sidecar container will be injected to retrieve and automatically renew the SVID and bundle. `csi` mode is implicitly enabled. |
 | `proxy`   | An Envoy sidecar container will be injected. `csi` mode is implicitly enabled. Note: this is used in conjuction with [Cofide's Connect Agent](#production-use-cases) |
 
+When using the `proxy` component, the log level for the Envoy sidecar can be configured using the `spiffe.cofide.io/envoy-log-level` annotation.
+
 ### Debug UI
 
 `spiffe-enable` also provides a basic UI to help user's debug the configuration and credentials that have been received by the workload identity provider - eg the SVID and the trust bundle. 
