@@ -266,7 +266,7 @@ func (e *Envoy) GetInitContainer() corev1.Container {
 	}
 }
 
-func (e *Envoy) GetSidecarContainer() corev1.Container {
+func (e *Envoy) GetSidecarContainer(logLevel string) corev1.Container {
 	configFilePath := filepath.Join(EnvoyConfigMountPath, EnvoyConfigFileName)
 
 	return corev1.Container{
@@ -274,7 +274,7 @@ func (e *Envoy) GetSidecarContainer() corev1.Container {
 		Image:           IstioImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command:         []string{"envoy"},
-		Args:            []string{"-c", configFilePath},
+		Args:            []string{"-c", configFilePath, "-l", logLevel},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: EnvoyConfigVolumeName, MountPath: EnvoyConfigMountPath},
 			workload.GetSPIFFEVolumeMount(),
