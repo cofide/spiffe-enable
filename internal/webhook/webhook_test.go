@@ -229,10 +229,10 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 				for _, c := range mutatedPod.Spec.Containers {
 					if c.Name == proxy.EnvoySidecarContainerName {
 						foundProxySidecar = true
-						assert.Equal(t, proxy.EnvoyImage, c.Image)
+						assert.Equal(t, proxy.IstioImage, c.Image)
 						// Check args, mounts, security context, ports for sidecar
 						require.NotNil(t, c.SecurityContext)
-						assert.Equal(t, ptr.To(int64(101)), c.SecurityContext.RunAsUser)
+						assert.Equal(t, ptr.To(int64(1337)), c.SecurityContext.RunAsUser)
 						assert.Equal(t, ptr.To(true), c.SecurityContext.RunAsNonRoot)
 						require.Len(t, c.Ports, 1)
 						assert.Equal(t, int32(proxy.EnvoyPort), c.Ports[0].ContainerPort)

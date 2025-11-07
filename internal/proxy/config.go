@@ -7,14 +7,16 @@ import (
 	"path/filepath"
 	"text/template"
 
+	constants "github.com/cofide/spiffe-enable/internal/const"
 	"github.com/cofide/spiffe-enable/internal/helper"
+	"github.com/cofide/spiffe-enable/internal/workload"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 )
 
 // Envoy-specific constants
 var (
-	EnvoyImage = "envoyproxy/envoy:v1.33-latest"
+	IstioImage = "docker.io/istio/proxyv2:1.26.4"
 )
 
 const (
@@ -25,7 +27,7 @@ const (
 	EnvoyConfigContentEnvVar     = "ENVOY_CONFIG_CONTENT"
 	EnvoyConfigInitContainerName = "inject-envoy-config"
 	EnvoyPort                    = 10000
-	EnvoyUID                     = 101
+	EnvoyUID                     = 1337
 	DNSProxyPort                 = 15053
 )
 
@@ -89,29 +91,126 @@ type Envoy struct {
 }
 
 func NewEnvoy(params EnvoyConfigParams) (*Envoy, error) {
-	if params.NodeID == "" {
-		params.NodeID = "node"
-	}
-	if params.ClusterName == "" {
-		params.ClusterName = "cluster"
-	}
-	if params.AdminAddress == "" {
-		params.AdminAddress = "127.0.0.1"
-	}
-	if params.AdminPort == 0 {
-		params.AdminPort = 9901
+	params.setDefaults()
+
+	cfg := params.build()
+
+	nftTablesParams := NftablesParams{
+		EnvoyUID:     EnvoyUID,
+		EnvoyPort:    EnvoyPort,
+		DNSProxyPort: DNSProxyPort,
 	}
 
-	cfg := map[string]interface{}{
+	tmpl, err := template.New("initScript").Parse(nftablesSetupScript)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse nftables init script template: %w", err)
+	}
+
+	var renderedScript bytes.Buffer
+	if err := tmpl.Execute(&renderedScript, nftTablesParams); err != nil {
+		return nil, fmt.Errorf("failed to render nftables init script template with params: %w", err)
+	}
+
+	envoyConfigJSON, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling proxy config to JSON: %w", err)
+	}
+
+	return &Envoy{InitScript: renderedScript.String(), Cfg: envoyConfigJSON}, nil
+}
+
+func (e *Envoy) GetConfigVolume() corev1.Volume {
+	return corev1.Volume{
+		Name:         EnvoyConfigVolumeName,
+		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+	}
+}
+
+func (e *Envoy) GetInitContainer() corev1.Container {
+	configFilePath := filepath.Join(EnvoyConfigMountPath, EnvoyConfigFileName)
+
+	// This command writes out an Envoy config file based on the contents of the environment variable
+	envoyConfigCmd := fmt.Sprintf("mkdir -p %s && printf '%%s' \"${%s}\" > %s",
+		filepath.Dir(configFilePath),
+		EnvoyConfigContentEnvVar,
+		configFilePath)
+
+	cmd := fmt.Sprintf("set -e; %s && %s", envoyConfigCmd, e.InitScript)
+
+	return corev1.Container{
+		Name:            EnvoyConfigInitContainerName,
+		Image:           helper.InitHelperImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command:         []string{"/bin/sh", "-c"},
+		Args:            []string{cmd},
+		Env:             []corev1.EnvVar{{Name: EnvoyConfigContentEnvVar, Value: string(e.Cfg)}},
+		VolumeMounts:    []corev1.VolumeMount{{Name: EnvoyConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
+		SecurityContext: &corev1.SecurityContext{
+			Capabilities: &corev1.Capabilities{
+				Add: []corev1.Capability{"NET_ADMIN", "NET_RAW"}, // # Additional capabilities required to apply nftables rules
+
+			},
+			RunAsUser:    ptr.To(int64(0)), // # Run as root in order to apply nftables rules
+			RunAsNonRoot: ptr.To(false),
+		},
+	}
+}
+
+func (e *Envoy) GetSidecarContainer(logLevel string) corev1.Container {
+	configFilePath := filepath.Join(EnvoyConfigMountPath, EnvoyConfigFileName)
+
+	return corev1.Container{
+		Name:            EnvoySidecarContainerName,
+		Image:           IstioImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command:         []string{"envoy"},
+		Args:            []string{"-c", configFilePath, "-l", logLevel},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: EnvoyConfigVolumeName, MountPath: EnvoyConfigMountPath},
+			workload.GetSPIFFEVolumeMount(),
+		},
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: ptr.To(false),
+			RunAsUser:                ptr.To(int64(EnvoyUID)), // # Run as non-root user
+			RunAsGroup:               ptr.To(int64(EnvoyUID)), // # Run as non-root group
+			RunAsNonRoot:             ptr.To(true),
+			Privileged:               ptr.To(false),
+			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"all"}},
+		},
+		Ports: []corev1.ContainerPort{
+			{
+				ContainerPort: EnvoyPort,
+			},
+		},
+	}
+}
+
+func (p *EnvoyConfigParams) setDefaults() {
+	if p.NodeID == "" {
+		p.NodeID = "node"
+	}
+	if p.ClusterName == "" {
+		p.ClusterName = "cluster"
+	}
+	if p.AdminAddress == "" {
+		p.AdminAddress = "127.0.0.1"
+	}
+	if p.AdminPort == 0 {
+		p.AdminPort = 9901
+	}
+}
+
+func (p *EnvoyConfigParams) build() map[string]interface{} {
+	return map[string]interface{}{
 		"node": map[string]interface{}{
-			"id":      params.NodeID,
-			"cluster": params.ClusterName,
+			"id":      p.NodeID,
+			"cluster": p.ClusterName,
 		},
 		"admin": map[string]interface{}{
 			"address": map[string]interface{}{
 				"socket_address": map[string]interface{}{
-					"address":    params.AdminAddress,
-					"port_value": params.AdminPort,
+					"address":    p.AdminAddress,
+					"port_value": p.AdminPort,
 				},
 			},
 		},
@@ -160,8 +259,8 @@ func NewEnvoy(params EnvoyConfigParams) (*Envoy, error) {
 										"endpoint": map[string]interface{}{
 											"address": map[string]interface{}{
 												"socket_address": map[string]interface{}{
-													"address":    params.AgentXDSService,
-													"port_value": params.AgentXDSPort,
+													"address":    p.AgentXDSService,
+													"port_value": p.AgentXDSPort,
 												},
 											},
 										},
@@ -171,89 +270,34 @@ func NewEnvoy(params EnvoyConfigParams) (*Envoy, error) {
 						},
 					},
 				},
+				getSDSCluster(),
 			},
 		},
 	}
-
-	nftTablesParams := NftablesParams{
-		EnvoyUID:     EnvoyUID,
-		EnvoyPort:    EnvoyPort,
-		DNSProxyPort: DNSProxyPort,
-	}
-
-	tmpl, err := template.New("initScript").Parse(nftablesSetupScript)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse nftables init script template: %w", err)
-	}
-
-	var renderedScript bytes.Buffer
-	if err := tmpl.Execute(&renderedScript, nftTablesParams); err != nil {
-		return nil, fmt.Errorf("failed to render nftables init script template with params: %w", err)
-	}
-
-	envoyConfigJSON, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("error marshalling proxy config to JSON")
-	}
-
-	return &Envoy{InitScript: renderedScript.String(), Cfg: envoyConfigJSON}, nil
 }
 
-func (e *Envoy) GetConfigVolume() corev1.Volume {
-	return corev1.Volume{
-		Name:         EnvoyConfigVolumeName,
-		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-	}
-}
-
-func (e *Envoy) GetInitContainer() corev1.Container {
-	configFilePath := filepath.Join(EnvoyConfigMountPath, EnvoyConfigFileName)
-
-	// This command writes out an Envoy config file based on the contents of the environment variable
-	envoyConfigCmd := fmt.Sprintf("mkdir -p %s && printf '%%s' \"${%s}\" > %s",
-		filepath.Dir(configFilePath),
-		EnvoyConfigContentEnvVar,
-		configFilePath)
-
-	cmd := fmt.Sprintf("set -e; %s && %s", envoyConfigCmd, e.InitScript)
-
-	return corev1.Container{
-		Name:            EnvoyConfigInitContainerName,
-		Image:           helper.InitHelperImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
-		Command:         []string{"/bin/sh", "-c"},
-		Args:            []string{cmd},
-		Env:             []corev1.EnvVar{{Name: EnvoyConfigContentEnvVar, Value: string(e.Cfg)}},
-		VolumeMounts:    []corev1.VolumeMount{{Name: EnvoyConfigVolumeName, MountPath: filepath.Dir(configFilePath)}},
-		SecurityContext: &corev1.SecurityContext{
-			Capabilities: &corev1.Capabilities{
-				Add: []corev1.Capability{"NET_ADMIN", "NET_RAW"}, // # Additional capabilities required to apply nftables rules
-
-			},
-			RunAsUser:    ptr.To(int64(0)), // # Run as root in order to apply nftables rules
-			RunAsNonRoot: ptr.To(false),
-		},
-	}
-}
-
-func (e *Envoy) GetSidecarContainer() corev1.Container {
-	configFilePath := filepath.Join(EnvoyConfigMountPath, EnvoyConfigFileName)
-
-	return corev1.Container{
-		Name:            EnvoySidecarContainerName,
-		Image:           EnvoyImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
-		Command:         []string{"envoy"},
-		Args:            []string{"-c", configFilePath},
-		VolumeMounts:    []corev1.VolumeMount{{Name: EnvoyConfigVolumeName, MountPath: EnvoyConfigMountPath}},
-		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:    ptr.To(int64(101)), // # Run as non-root user
-			RunAsGroup:   ptr.To(int64(101)), // # Run as non-root group
-			RunAsNonRoot: ptr.To(true),
-		},
-		Ports: []corev1.ContainerPort{
-			{
-				ContainerPort: EnvoyPort,
+func getSDSCluster() map[string]interface{} {
+	return map[string]interface{}{
+		"name":                   "sds-grpc",
+		"connect_timeout":        "5s",
+		"type":                   "STATIC",
+		"http2_protocol_options": map[string]interface{}{},
+		"load_assignment": map[string]interface{}{
+			"cluster_name": "sds-grpc",
+			"endpoints": []interface{}{
+				map[string]interface{}{
+					"lb_endpoints": []interface{}{
+						map[string]interface{}{
+							"endpoint": map[string]interface{}{
+								"address": map[string]interface{}{
+									"pipe": map[string]interface{}{
+										"path": constants.SPIFFEWLSocketPath,
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 	}

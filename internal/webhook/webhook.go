@@ -152,7 +152,14 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 				// Add the Envoy container as a sidecar
 				if !workload.ContainerExists(pod.Spec.Containers, proxy.EnvoySidecarContainerName) {
 					logger.Info("Adding Envoy proxy sidecar container", "containerName", proxy.EnvoySidecarContainerName)
-					pod.Spec.Containers = append(pod.Spec.Containers, envoy.GetSidecarContainer())
+
+					// Check for a log level annotation
+					logLevel := pod.Annotations[constants.EnvoyLogLevelAnnotation]
+					if logLevel == "" {
+						logLevel = "info"
+					}
+
+					pod.Spec.Containers = append(pod.Spec.Containers, envoy.GetSidecarContainer(logLevel))
 				}
 
 			case constants.InjectAnnotationHelper:
