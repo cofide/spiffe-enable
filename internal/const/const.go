@@ -2,6 +2,8 @@ package constants
 
 // Pod annotations
 const (
+	ProviderAnnotation      = "spiffe.cofide.io/provider"
+	ProviderRoleAnnotation  = "spiffe.cofide.io/role"
 	InjectAnnotation        = "spiffe.cofide.io/inject"
 	DebugAnnotation         = "spiffe.cofide.io/debug"
 	EnvoyLogLevelAnnotation = "spiffe.cofide.io/envoy-log-level"

@@ -80,6 +80,8 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		constants.InjectAnnotationHelper: true,
 		constants.InjectAnnotationProxy:  true,
 		constants.InjectCSIVolume:        true,
+		constants.ProviderAnnotation:     true,
+		constants.ProviderRoleAnnotation: true,
 	}
 
 	var invalidModes []string
@@ -208,7 +210,16 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 					logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", helper.SPIFFEHelperInitContainerName)
 					pod.Spec.InitContainers = append([]corev1.Container{spiffeHelper.GetInitContainer()}, pod.Spec.InitContainers...)
 				}
+
+			case constants.ProviderAnnotation:
+				// Ensure the CSI volume is injected and mounted to containers
+				ensureCSIVolumeAndMount(pod, logger)
+
+				// Inject an AWS token sidecar container
+				logger.Info("Applying AWS token mode mutations")
+
 			}
+
 		}
 	}
 
