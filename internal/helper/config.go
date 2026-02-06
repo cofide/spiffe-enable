@@ -49,7 +49,7 @@ type SPIFFEHelperConfig struct {
 	IncludeFederatedDomains  bool                     `hcl:"include_federated_domains"`
 	RenewSignal              string                   `hcl:"renew_signal"`
 	DaemonMode               *bool                    `hcl:"daemon_mode"`
-	HealthCheck              SPIFFEHelperHealthConfig `hcl:"health_check,block"`
+	HealthCheck              SPIFFEHelperHealthConfig `hcl:"health_checks,block"`
 	Hint                     string                   `hcl:"hint"`
 
 	// x509 configuration
