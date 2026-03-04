@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	constants "github.com/cofide/spiffe-enable/internal/const"
@@ -50,11 +51,25 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 
 	logger := a.Log.WithValues("podNamespace", pod.Namespace, "podName", pod.Name, "request", req.UID)
 
-	// Check for a debug annotation
+	handleDebugAnnotation(pod, logger)
+
+	if errResp, err := applyInjections(pod, logger); err != nil {
+		return errResp
+	}
+
+	marshaledPod, err := json.Marshal(pod)
+	if err != nil {
+		logger.Error(err, "Failed to marshal modified pod")
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+
+	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
+}
+
+func handleDebugAnnotation(pod *corev1.Pod, logger logr.Logger) {
 	debugAnnotationValue, debugAnnotationExists := pod.Annotations[constants.DebugAnnotation]
 
 	if debugAnnotationExists && debugAnnotationValue == "true" {
-		// Ensure the CSI volume is injected and mounted to containers
 		ensureCSIVolumeAndMount(pod, logger)
 
 		if !workload.ContainerExists(pod.Spec.Containers, constants.DebugUIContainerName) {
@@ -72,9 +87,13 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 			pod.Spec.Containers = append(pod.Spec.Containers, debugSidecar)
 		}
 	}
+}
 
-	// Check for an inject annotation and process based on the value
+func applyInjections(pod *corev1.Pod, logger logr.Logger) (admission.Response, error) {
 	injectAnnotationValue, injectAnnotationExists := pod.Annotations[constants.InjectAnnotation]
+	if !injectAnnotationExists {
+		return admission.Response{}, nil
+	}
 
 	allowedModes := map[string]bool{
 		constants.InjectAnnotationHelper: true,
@@ -82,143 +101,146 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 		constants.InjectCSIVolume:        true,
 	}
 
+	toInject := strings.Split(injectAnnotationValue, ",")
+
 	var invalidModes []string
+	for _, mode := range toInject {
+		trimmedMode := strings.TrimSpace(mode)
+		if trimmedMode == "" {
+			continue
+		}
+		if _, isValid := allowedModes[trimmedMode]; !isValid {
+			invalidModes = append(invalidModes, trimmedMode)
+		}
+	}
 
-	if injectAnnotationExists {
-		toInject := strings.Split(injectAnnotationValue, ",")
+	if len(invalidModes) > 0 {
+		err := fmt.Errorf(
+			"invalid mode(s) found in injection list: %v. Allowed modes are: %v",
+			strings.Join(invalidModes, ", "),
+			getKeys(allowedModes),
+		)
+		logger.Error(err, "Pod rejected due to invalid injection modes", "providedModes", injectAnnotationValue, "invalidFound", invalidModes)
+		return admission.Errored(http.StatusBadRequest, err), err
+	}
 
-		// First check that the desired injections are permitted
-		for _, mode := range toInject {
-			trimmedMode := strings.TrimSpace(mode)
-			if trimmedMode == "" {
-				continue
+	for _, mode := range toInject {
+		switch mode {
+		case constants.InjectCSIVolume:
+			ensureCSIVolumeAndMount(pod, logger)
+
+		case constants.InjectAnnotationProxy:
+			if err := applyProxyInjection(pod, logger); err != nil {
+				return admission.Errored(http.StatusInternalServerError, fmt.Errorf("error creating proxy config: %w", err)), err
 			}
 
-			if _, isValid := allowedModes[trimmedMode]; !isValid {
-				invalidModes = append(invalidModes, trimmedMode)
-			}
-		}
-
-		if len(invalidModes) > 0 {
-			err := fmt.Errorf(
-				"invalid mode(s) found in injection list: %v. Allowed modes are: %v",
-				strings.Join(invalidModes, ", "),
-				getKeys(allowedModes),
-			)
-			logger.Error(err, "Pod rejected due to invalid injection modes", "providedModes", injectAnnotationValue, "invalidFound", invalidModes)
-			return admission.Errored(http.StatusBadRequest, err)
-		}
-
-		// Now iterate the injections and apply
-		for _, mode := range toInject {
-			switch mode {
-			case constants.InjectCSIVolume:
-				// Ensure the CSI volume is injected and mounted to containers
-				ensureCSIVolumeAndMount(pod, logger)
-
-			case constants.InjectAnnotationProxy:
-				// Ensure the CSI volume is injected and mounted to containers
-				ensureCSIVolumeAndMount(pod, logger)
-
-				// Generate the Envoy configuration
-				configParams := proxy.EnvoyConfigParams{
-					NodeID:          "node",
-					ClusterName:     "cluster",
-					AdminPort:       9901,
-					AgentXDSService: constants.AgentXDSService,
-					AgentXDSPort:    constants.AgentXDSPort,
-				}
-
-				envoy, err := proxy.NewEnvoy(configParams)
-				if err != nil {
-					logger.Error(err, "Error creating proxy config")
-					return admission.Errored(http.StatusInternalServerError, fmt.Errorf("error creating proxy config: %w", err))
-				}
-
-				// Add an emptyDir volume for the Envoy proxy configuration if it doesn't already exist
-				if !workload.VolumeExists(pod, proxy.EnvoyConfigVolumeName) {
-					logger.Info("Adding Envoy config volume", "volumeName", proxy.EnvoyConfigVolumeName)
-					pod.Spec.Volumes = append(pod.Spec.Volumes, envoy.GetConfigVolume())
-				}
-
-				// Add an init container to write out the Envoy config to a file
-				if !workload.InitContainerExists(pod, proxy.EnvoyConfigInitContainerName) {
-					logger.Info("Adding init container to inject Envoy config", "initContainerName", proxy.EnvoyConfigInitContainerName)
-					pod.Spec.InitContainers = append([]corev1.Container{envoy.GetInitContainer()}, pod.Spec.InitContainers...)
-				}
-
-				// Add the Envoy container as a sidecar
-				if !workload.ContainerExists(pod.Spec.Containers, proxy.EnvoySidecarContainerName) {
-					logger.Info("Adding Envoy proxy sidecar container", "containerName", proxy.EnvoySidecarContainerName)
-
-					// Check for a log level annotation
-					logLevel := pod.Annotations[constants.EnvoyLogLevelAnnotation]
-					if logLevel == "" {
-						logLevel = "info"
-					}
-
-					pod.Spec.Containers = append(pod.Spec.Containers, envoy.GetSidecarContainer(logLevel))
-				}
-
-			case constants.InjectAnnotationHelper:
-				// Ensure the CSI volume is injected and mounted to containers
-				ensureCSIVolumeAndMount(pod, logger)
-
-				// Inject a spiffe-helper sidecar container
-				logger.Info("Applying 'helper' mode mutations")
-
-				incIntermediateBundle := false
-				incIntermediateValue, incIntermediateExists := pod.Annotations[helper.SPIFFEHelperIncIntermediateAnnotation]
-				if incIntermediateExists && incIntermediateValue == "true" {
-					incIntermediateBundle = true
-				}
-
-				// Generate the spiffe-helper configuration
-				configParams := helper.SPIFFEHelperConfigParams{
-					AgentAddress:              constants.SPIFFEWLSocketPath,
-					CertPath:                  constants.SPIFFEEnableCertDirectory,
-					IncludeIntermediateBundle: incIntermediateBundle,
-				}
-
-				spiffeHelper, err := helper.NewSPIFFEHelper(configParams)
-				if err != nil {
-					logger.Error(err, "Error creating spiffe-helper config")
-					return admission.Errored(http.StatusInternalServerError,
-						fmt.Errorf("error creating spiffe-helper config: %w", err))
-				}
-
-				// Add an emptyDir volume for the SPIFFE Helper configuration if it doesn't already exist
-				if !workload.VolumeExists(pod, helper.SPIFFEHelperConfigVolumeName) {
-					logger.Info("Adding spiffe-helper config volume", "volumeName", helper.SPIFFEHelperConfigVolumeName)
-					pod.Spec.Volumes = append(pod.Spec.Volumes, spiffeHelper.GetConfigVolume())
-				}
-
-				// Add an emptyDir volume for the certs managed by SPIFFE Helper
-				if !workload.VolumeExists(pod, constants.SPIFFEEnableCertVolumeName) {
-					logger.Info("Adding spiffe-helper certs volume", "volumeName", constants.SPIFFEEnableCertVolumeName)
-					pod.Spec.Volumes = append(pod.Spec.Volumes, getCertsVolume())
-				}
-
-				if !workload.InitContainerExists(pod, helper.SPIFFEHelperSidecarContainerName) {
-					logger.Info("Adding spiffe-helper sidecar container", "initContainerName", helper.SPIFFEHelperSidecarContainerName)
-					pod.Spec.InitContainers = append([]corev1.Container{spiffeHelper.GetSidecarContainer()}, pod.Spec.InitContainers...)
-				}
-
-				if !workload.InitContainerExists(pod, helper.SPIFFEHelperInitContainerName) {
-					logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", helper.SPIFFEHelperInitContainerName)
-					pod.Spec.InitContainers = append([]corev1.Container{spiffeHelper.GetInitContainer()}, pod.Spec.InitContainers...)
-				}
+		case constants.InjectAnnotationHelper:
+			if err := applyHelperInjection(pod, logger); err != nil {
+				return admission.Errored(http.StatusInternalServerError, fmt.Errorf("error creating spiffe-helper config: %w", err)), err
 			}
 		}
 	}
 
-	marshaledPod, err := json.Marshal(pod)
+	return admission.Response{}, nil
+}
+
+func applyProxyInjection(pod *corev1.Pod, logger logr.Logger) error {
+	ensureCSIVolumeAndMount(pod, logger)
+
+	configParams := proxy.EnvoyConfigParams{
+		NodeID:          "node",
+		ClusterName:     "cluster",
+		AdminPort:       9901,
+		AgentXDSService: constants.AgentXDSService,
+		AgentXDSPort:    constants.AgentXDSPort,
+	}
+
+	envoy, err := proxy.NewEnvoy(configParams)
 	if err != nil {
-		logger.Error(err, "Failed to marshal modified pod")
-		return admission.Errored(http.StatusInternalServerError, err)
+		logger.Error(err, "Error creating proxy config")
+		return err
 	}
 
-	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
+	if !workload.VolumeExists(pod, proxy.EnvoyConfigVolumeName) {
+		logger.Info("Adding Envoy config volume", "volumeName", proxy.EnvoyConfigVolumeName)
+		pod.Spec.Volumes = append(pod.Spec.Volumes, envoy.GetConfigVolume())
+	}
+
+	if !workload.InitContainerExists(pod, proxy.EnvoyConfigInitContainerName) {
+		logger.Info("Adding init container to inject Envoy config", "initContainerName", proxy.EnvoyConfigInitContainerName)
+		pod.Spec.InitContainers = append([]corev1.Container{envoy.GetInitContainer()}, pod.Spec.InitContainers...)
+	}
+
+	if !workload.ContainerExists(pod.Spec.Containers, proxy.EnvoySidecarContainerName) {
+		logger.Info("Adding Envoy proxy sidecar container", "containerName", proxy.EnvoySidecarContainerName)
+
+		logLevel := pod.Annotations[constants.EnvoyLogLevelAnnotation]
+		if logLevel == "" {
+			logLevel = "info"
+		}
+
+		pod.Spec.Containers = append(pod.Spec.Containers, envoy.GetSidecarContainer(logLevel))
+	}
+
+	return nil
+}
+
+func applyHelperInjection(pod *corev1.Pod, logger logr.Logger) error {
+	ensureCSIVolumeAndMount(pod, logger)
+
+	logger.Info("Applying 'helper' mode mutations")
+
+	incIntermediateBundle := false
+	incIntermediateValue, incIntermediateExists := pod.Annotations[helper.SPIFFEHelperIncIntermediateAnnotation]
+	if incIntermediateExists && incIntermediateValue == "true" {
+		incIntermediateBundle = true
+	}
+
+	healthCheckPort := 0
+	if portStr, ok := pod.Annotations[constants.SPIFFEHelperHealthPortAnnotation]; ok {
+		if p, err := strconv.Atoi(portStr); err != nil || p <= 0 || p > 65535 {
+			logger.Error(fmt.Errorf("invalid annotation value %q", portStr),
+				"Ignoring invalid helper-health-port annotation, using default",
+				"annotation", constants.SPIFFEHelperHealthPortAnnotation)
+		} else {
+			healthCheckPort = p
+		}
+	}
+
+	configParams := helper.SPIFFEHelperConfigParams{
+		AgentAddress:              constants.SPIFFEWLSocketPath,
+		CertPath:                  constants.SPIFFEEnableCertDirectory,
+		IncludeIntermediateBundle: incIntermediateBundle,
+		HealthCheckPort:           healthCheckPort,
+	}
+
+	spiffeHelper, err := helper.NewSPIFFEHelper(configParams)
+	if err != nil {
+		logger.Error(err, "Error creating spiffe-helper config")
+		return err
+	}
+
+	if !workload.VolumeExists(pod, helper.SPIFFEHelperConfigVolumeName) {
+		logger.Info("Adding spiffe-helper config volume", "volumeName", helper.SPIFFEHelperConfigVolumeName)
+		pod.Spec.Volumes = append(pod.Spec.Volumes, spiffeHelper.GetConfigVolume())
+	}
+
+	if !workload.VolumeExists(pod, constants.SPIFFEEnableCertVolumeName) {
+		logger.Info("Adding spiffe-helper certs volume", "volumeName", constants.SPIFFEEnableCertVolumeName)
+		pod.Spec.Volumes = append(pod.Spec.Volumes, getCertsVolume())
+	}
+
+	if !workload.InitContainerExists(pod, helper.SPIFFEHelperSidecarContainerName) {
+		logger.Info("Adding spiffe-helper sidecar container", "initContainerName", helper.SPIFFEHelperSidecarContainerName)
+		pod.Spec.InitContainers = append([]corev1.Container{spiffeHelper.GetSidecarContainer()}, pod.Spec.InitContainers...)
+	}
+
+	if !workload.InitContainerExists(pod, helper.SPIFFEHelperInitContainerName) {
+		logger.Info("Adding init container to inject spiffe-helper config", "initContainerName", helper.SPIFFEHelperInitContainerName)
+		pod.Spec.InitContainers = append([]corev1.Container{spiffeHelper.GetInitContainer()}, pod.Spec.InitContainers...)
+	}
+
+	return nil
 }
 
 func getCertsVolume() corev1.Volume {

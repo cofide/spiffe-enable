@@ -79,11 +79,19 @@ type SPIFFEHelperConfigParams struct {
 	AgentAddress              string
 	CertPath                  string
 	IncludeIntermediateBundle bool
+	// HealthCheckPort overrides the port spiffe-helper listens on for health
+	// checks.  Defaults to SPIFFEHelperHealthCheckPort (8081) when zero.
+	HealthCheckPort int
 }
 
 func NewSPIFFEHelper(params SPIFFEHelperConfigParams) (*SPIFFEHelper, error) {
 	if params.AgentAddress == "" || params.CertPath == "" {
 		return nil, fmt.Errorf("missing spiffe-helper configuration parameters")
+	}
+
+	healthCheckPort := params.HealthCheckPort
+	if healthCheckPort == 0 {
+		healthCheckPort = SPIFFEHelperHealthCheckPort
 	}
 
 	spiffeHelperCfg := &SPIFFEHelperConfig{
@@ -97,6 +105,7 @@ func NewSPIFFEHelper(params SPIFFEHelperConfigParams) (*SPIFFEHelper, error) {
 		SVIDBundleFilename:       "ca.pem",
 		HealthCheck: SPIFFEHelperHealthConfig{
 			ListenerEnabled: true,
+			BindPort:        healthCheckPort,
 		},
 	}
 
@@ -106,7 +115,7 @@ func NewSPIFFEHelper(params SPIFFEHelperConfigParams) (*SPIFFEHelper, error) {
 	hclBytes := hclFile.Bytes()
 	hclString := string(hclBytes)
 
-	return &SPIFFEHelper{Config: hclString}, nil
+	return &SPIFFEHelper{Config: hclString, HealthCheckPort: healthCheckPort}, nil
 }
 
 func (h *SPIFFEHelper) GetConfigVolume() corev1.Volume {
@@ -130,7 +139,7 @@ func (h *SPIFFEHelper) GetSidecarContainer() corev1.Container {
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   SPIFFEHelperHealthCheckReadinessPath,
-					Port:   intstr.FromInt(SPIFFEHelperHealthCheckPort),
+					Port:   intstr.FromInt(h.HealthCheckPort),
 					Scheme: corev1.URISchemeHTTP,
 				},
 			},
@@ -144,7 +153,7 @@ func (h *SPIFFEHelper) GetSidecarContainer() corev1.Container {
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   SPIFFEHelperHealthCheckLivenessPath,
-					Port:   intstr.FromInt(SPIFFEHelperHealthCheckPort),
+					Port:   intstr.FromInt(h.HealthCheckPort),
 					Scheme: corev1.URISchemeHTTP,
 				},
 			},
@@ -158,7 +167,7 @@ func (h *SPIFFEHelper) GetSidecarContainer() corev1.Container {
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   SPIFFEHelperHealthCheckReadinessPath,
-					Port:   intstr.FromInt(SPIFFEHelperHealthCheckPort),
+					Port:   intstr.FromInt(h.HealthCheckPort),
 					Scheme: corev1.URISchemeHTTP,
 				},
 			},
@@ -213,7 +222,8 @@ func (h *SPIFFEHelper) GetInitContainer() corev1.Container {
 }
 
 type SPIFFEHelper struct {
-	Config string
+	Config          string
+	HealthCheckPort int
 }
 
 func BoolPtr(b bool) *bool {
