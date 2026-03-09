@@ -180,7 +180,7 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 
 				// Helper Sidecar Container
 				foundHelperSidecar := false
-				for _, c := range mutatedPod.Spec.InitContainers {
+				for _, c := range mutatedPod.Spec.Containers {
 					if c.Name == helper.SPIFFEHelperSidecarContainerName {
 						foundHelperSidecar = true
 						assert.Equal(t, helper.SPIFFEHelperImage, c.Image)
@@ -191,8 +191,8 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 				}
 				assert.True(t, foundHelperSidecar, "SPIFFE Helper sidecar container not found")
 
-				assert.Len(t, mutatedPod.Spec.Containers, 1)     // app
-				assert.Len(t, mutatedPod.Spec.InitContainers, 2) // init + helper
+				assert.Len(t, mutatedPod.Spec.Containers, 2)     // app + helper
+				assert.Len(t, mutatedPod.Spec.InitContainers, 1) // helper-init
 			},
 		},
 		{
@@ -250,8 +250,8 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			expectedAllowed: true,
 			expectedPatched: true,
 			validatePod: func(t *testing.T, mutatedPod *corev1.Pod) {
-				assert.Len(t, mutatedPod.Spec.Containers, 2)     // app + proxy
-				assert.Len(t, mutatedPod.Spec.InitContainers, 3) // helper-init + helper + proxy-init
+				assert.Len(t, mutatedPod.Spec.Containers, 3)     // app + helper + proxy
+				assert.Len(t, mutatedPod.Spec.InitContainers, 2) // helper-init + proxy-init
 			},
 		},
 		{
