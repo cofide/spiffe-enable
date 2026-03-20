@@ -27,12 +27,12 @@ When using the `proxy` component, the log level for the Envoy sidecar can be con
 
 ### Debug UI
 
-`spiffe-enable` also provides a basic UI to help user's debug the configuration and credentials that have been received by the workload identity provider - eg the SVID and the trust bundle. 
+`spiffe-enable` also provides a basic UI to help users debug the configuration and credentials that have been received by the workload identity provider - eg the SVID and the trust bundle.
 
 To use the debug UI. add the annotation `spiffe.cofide.io/debug: true` to the template of the pod you wish to debug. By default, the UI serves on the container port 8080; use `port-forward` to connect to it (you may wish to choose a different local port):
 
 ```sh
-kubectl port-forward [pod-name] 8080 
+kubectl port-forward [pod-name] 8080
 ```
 
 You can now browse to `http://localhost:8080` to use the UI.
@@ -70,9 +70,8 @@ helm install \
 
 <div style="float: left; margin-right: 10px;">
     <a href="https://www.cofide.io">
-        <img src="docs/img/cofide-colour-blue.svg" width="40" alt="Cofide">
+        <img src="docs/img/cofide-colour.svg" width="40" alt="Cofide">
     </a>
 </div>
 
-`spiffe-enable` is a project developed and maintained by [Cofide](https://www.cofide.io). We're building a workload identity platform that is seamless and secure for multi and hybrid cloud environments. If you have a production use case with need for greater flexibility, control and visibility, with enterprise-level support, please [speak with us](mailto:hello@cofide.io) to find out more about the [Cofide](https://www.cofide.io) early access programme 👀.
-
+`spiffe-enable` is a project developed and maintained by [Cofide](https://www.cofide.io). We've built a workload identity platform that is seamless and secure for multi and hybrid cloud environments. If you have a production use case with need for greater flexibility, control and visibility, with enterprise-level support, please read our introductory [blog post](https://www.cofide.io/resources/introducing-cofide-connect-the-control-plane-for-workload-identity-and-access-management-iam), browse our [public documentation](https://docs.cofide.dev) or [speak with us](https://www.cofide.io/contact) to find out more about the Cofide Connect Workload Identity platform.
