@@ -27,7 +27,7 @@ When using the `proxy` component, the log level for the Envoy sidecar can be con
 
 ### Debug UI
 
-`spiffe-enable` also provides a basic UI to help user's debug the configuration and credentials that have been received by the workload identity provider - eg the SVID and the trust bundle.
+`spiffe-enable` also provides a basic UI to help users debug the configuration and credentials that have been received by the workload identity provider - eg the SVID and the trust bundle.
 
 To use the debug UI. add the annotation `spiffe.cofide.io/debug: true` to the template of the pod you wish to debug. By default, the UI serves on the container port 8080; use `port-forward` to connect to it (you may wish to choose a different local port):
 
