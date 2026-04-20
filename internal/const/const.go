@@ -35,6 +35,16 @@ const (
 	SPIFFEEnableCertDirectory  = "/spiffe-enable"
 )
 
+// spiffe-helper annotations
+const (
+	// SPIFFEHelperHealthPortAnnotation overrides the port spiffe-helper binds its
+	// health-check server on (and the port used for the sidecar's startup/liveness/
+	// readiness probes).  Useful when the default port (8081) is already in use by
+	// another container sharing the pod's network namespace.
+	// Example: spiffe.cofide.io/helper-health-port: "8088"
+	SPIFFEHelperHealthPortAnnotation = "spiffe.cofide.io/helper-health-port"
+)
+
 // Debug UI constants
 const (
 	DebugUIContainerName = "spiffe-enable-ui"
