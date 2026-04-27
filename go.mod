@@ -1,6 +1,6 @@
 module github.com/cofide/spiffe-enable
 
-go 1.25.5
+go 1.25
 
 require (
 	github.com/evanphx/json-patch v5.9.11+incompatible

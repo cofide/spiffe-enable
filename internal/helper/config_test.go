@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/hcl/v2/hclsimple"
@@ -31,7 +32,20 @@ func TestNewSPIFFEHelper(t *testing.T) {
 				"SVIDFilename":             `svid_file_name = "tls.crt"`,
 				"SVIDKeyFilename":          `svid_key_file_name = "tls.key"`,
 				"SVIDBundleFilename":       `svid_bundle_file_name = "ca.pem"`,
+				"JWTSVIDFileMode":          `jwt_svid_file_mode = 600`,
 				"HealthCheckEnabled":       `listener_enabled = true`,
+			},
+			expectError: false,
+		},
+		{
+			name: "custom jwt svid file mode",
+			params: SPIFFEHelperConfigParams{
+				AgentAddress:    "/tmp/agent.sock",
+				CertPath:        "/mnt/certs",
+				JWTSVIDFileMode: 644,
+			},
+			expectedHCLSubstrings: map[string]string{
+				"JWTSVIDFileMode": `jwt_svid_file_mode = 644`,
 			},
 			expectError: false,
 		},
@@ -79,6 +93,7 @@ func TestNewSPIFFEHelper(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, helper)
 			require.NotEmpty(t, helper.Config)
+			require.False(t, strings.Contains(helper.Config, "null"), "generated config must not contain `null`: %s", helper.Config)
 
 			// Parse the generated HCL string back into the SPIFFEHelperConfig struct
 			var decodedCfg SPIFFEHelperConfig
@@ -99,6 +114,12 @@ func TestNewSPIFFEHelper(t *testing.T) {
 			assert.Equal(t, "tls.crt", decodedCfg.SVIDFilename)
 			assert.Equal(t, "tls.key", decodedCfg.SVIDKeyFilename)
 			assert.Equal(t, "ca.pem", decodedCfg.SVIDBundleFilename)
+
+			if tt.params.JWTSVIDFileMode == 0 {
+				assert.Equal(t, 600, decodedCfg.JWTSVIDFileMode)
+			} else {
+				assert.Equal(t, tt.params.JWTSVIDFileMode, decodedCfg.JWTSVIDFileMode)
+			}
 
 			assert.True(t, decodedCfg.HealthCheck.ListenerEnabled)
 		})
