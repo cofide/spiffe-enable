@@ -19,6 +19,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+const annotationValueTrue = "true"
+
 type spiffeEnableWebhook struct {
 	Client  client.Client
 	decoder admission.Decoder
@@ -53,7 +55,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 	// Check for a debug annotation
 	debugAnnotationValue, debugAnnotationExists := pod.Annotations[constants.DebugAnnotation]
 
-	if debugAnnotationExists && debugAnnotationValue == "true" {
+	if debugAnnotationExists && debugAnnotationValue == annotationValueTrue {
 		// Ensure the CSI volume is injected and mounted to containers
 		ensureCSIVolumeAndMount(pod, logger)
 
@@ -169,7 +171,7 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 
 				incIntermediateBundle := false
 				incIntermediateValue, incIntermediateExists := pod.Annotations[helper.SPIFFEHelperIncIntermediateAnnotation]
-				if incIntermediateExists && incIntermediateValue == "true" {
+				if incIntermediateExists && incIntermediateValue == annotationValueTrue {
 					incIntermediateBundle = true
 				}
 

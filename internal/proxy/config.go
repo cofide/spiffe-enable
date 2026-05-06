@@ -31,6 +31,12 @@ const (
 	DNSProxyPort                 = 15053
 )
 
+const (
+	keyAddress     = "address"
+	keyClusterName = "cluster_name"
+	keyXDSCluster  = "xds_cluster"
+)
+
 type NftablesParams struct {
 	EnvoyUID     int
 	EnvoyPort    int
@@ -207,9 +213,9 @@ func (p *EnvoyConfigParams) build() map[string]interface{} {
 			"cluster": p.ClusterName,
 		},
 		"admin": map[string]interface{}{
-			"address": map[string]interface{}{
+			keyAddress: map[string]interface{}{
 				"socket_address": map[string]interface{}{
-					"address":    p.AdminAddress,
+					keyAddress:   p.AdminAddress,
 					"port_value": p.AdminPort,
 				},
 			},
@@ -221,7 +227,7 @@ func (p *EnvoyConfigParams) build() map[string]interface{} {
 				"grpc_services": []interface{}{
 					map[string]interface{}{
 						"envoy_grpc": map[string]interface{}{
-							"cluster_name": "xds_cluster",
+							keyClusterName: keyXDSCluster,
 						},
 					},
 				},
@@ -239,7 +245,7 @@ func (p *EnvoyConfigParams) build() map[string]interface{} {
 		"static_resources": map[string]interface{}{
 			"clusters": []interface{}{
 				map[string]interface{}{
-					"name":            "xds_cluster",
+					"name":            keyXDSCluster,
 					"type":            "LOGICAL_DNS",
 					"connect_timeout": "5s",
 					"typed_extension_protocol_options": map[string]interface{}{
@@ -251,15 +257,15 @@ func (p *EnvoyConfigParams) build() map[string]interface{} {
 						},
 					},
 					"load_assignment": map[string]interface{}{
-						"cluster_name": "xds_cluster",
+						keyClusterName: keyXDSCluster,
 						"endpoints": []interface{}{
 							map[string]interface{}{
 								"lb_endpoints": []interface{}{
 									map[string]interface{}{
 										"endpoint": map[string]interface{}{
-											"address": map[string]interface{}{
+											keyAddress: map[string]interface{}{
 												"socket_address": map[string]interface{}{
-													"address":    p.AgentXDSService,
+													keyAddress:   p.AgentXDSService,
 													"port_value": p.AgentXDSPort,
 												},
 											},
@@ -283,13 +289,13 @@ func getSDSCluster() map[string]interface{} {
 		"type":                   "STATIC",
 		"http2_protocol_options": map[string]interface{}{},
 		"load_assignment": map[string]interface{}{
-			"cluster_name": "sds-grpc",
+			keyClusterName: "sds-grpc",
 			"endpoints": []interface{}{
 				map[string]interface{}{
 					"lb_endpoints": []interface{}{
 						map[string]interface{}{
 							"endpoint": map[string]interface{}{
-								"address": map[string]interface{}{
+								keyAddress: map[string]interface{}{
 									"pipe": map[string]interface{}{
 										"path": constants.SPIFFEWLSocketPath,
 									},

@@ -128,7 +128,7 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 		},
 		{
 			name:            "spiffe.cofide.io/debug: true",
-			podAnnotations:  map[string]string{constants.DebugAnnotation: "true"},
+			podAnnotations:  map[string]string{constants.DebugAnnotation: annotationValueTrue},
 			initialPod:      basePod,
 			expectedAllowed: true,
 			expectedPatched: true,
