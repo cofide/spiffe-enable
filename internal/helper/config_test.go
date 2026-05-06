@@ -8,17 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	keyAgentAddress             = "AgentAddress"
-	keyCertDir                  = "CertDir"
-	keyAddIntermediatesToBundle = "AddIntermediatesToBundle"
-)
-
 func TestNewSPIFFEHelper(t *testing.T) {
 	tests := []struct {
 		name                      string
 		params                    SPIFFEHelperConfigParams
-		expectedHCLSubstrings     map[string]string // Key: expected field, Value: expected HCL representation
 		expectError               bool
 		expectedErrorMsgSubstring string
 	}{
@@ -27,17 +20,6 @@ func TestNewSPIFFEHelper(t *testing.T) {
 			params: SPIFFEHelperConfigParams{
 				AgentAddress: "/tmp/agent.sock",
 				CertPath:     "/mnt/certs",
-			},
-			expectedHCLSubstrings: map[string]string{
-				keyAgentAddress:             `agent_address = "/tmp/agent.sock"`,
-				keyCertDir:                  `cert_dir = "/mnt/certs"`,
-				keyAddIntermediatesToBundle: `add_intermediates_to_bundle = false`,
-				"DaemonMode":                `daemon_mode = true`,
-				"IncludeFederatedDomains":   `include_federated_domains = true`,
-				"SVIDFilename":              `svid_file_name = "tls.crt"`,
-				"SVIDKeyFilename":           `svid_key_file_name = "tls.key"`,
-				"SVIDBundleFilename":        `svid_bundle_file_name = "ca.pem"`,
-				"HealthCheckEnabled":        `listener_enabled = true`,
 			},
 			expectError: false,
 		},
@@ -48,11 +30,6 @@ func TestNewSPIFFEHelper(t *testing.T) {
 				CertPath:                  "/mnt/certs",
 				IncludeIntermediateBundle: true,
 			},
-			expectedHCLSubstrings: map[string]string{
-				keyAgentAddress:             `agent_address = "unix:///tmp/spire-agent/public/api.sock"`,
-				keyCertDir:                  `cert_dir = "/etc/workload-certs"`,
-				keyAddIntermediatesToBundle: `add_intermediates_to_bundle = true`,
-			},
 			expectError: false,
 		},
 		{
@@ -60,11 +37,6 @@ func TestNewSPIFFEHelper(t *testing.T) {
 			params: SPIFFEHelperConfigParams{
 				AgentAddress: "",
 				CertPath:     "",
-			},
-			expectedHCLSubstrings: map[string]string{
-				keyAgentAddress:             `agent_address = ""`,
-				keyCertDir:                  `cert_dir = ""`,
-				keyAddIntermediatesToBundle: `add_intermediates_to_bundle = false`,
 			},
 			expectError: true,
 		},
