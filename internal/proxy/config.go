@@ -32,9 +32,9 @@ const (
 )
 
 const (
-	keyAddress     = "address"
-	keyClusterName = "cluster_name"
-	keyXDSCluster  = "xds_cluster"
+	keyAddress      = "address"
+	keyClusterName  = "cluster_name"
+	valueXDSCluster = "xds_cluster"
 )
 
 type NftablesParams struct {
@@ -227,7 +227,7 @@ func (p *EnvoyConfigParams) build() map[string]interface{} {
 				"grpc_services": []interface{}{
 					map[string]interface{}{
 						"envoy_grpc": map[string]interface{}{
-							keyClusterName: keyXDSCluster,
+							keyClusterName: valueXDSCluster,
 						},
 					},
 				},
@@ -245,7 +245,7 @@ func (p *EnvoyConfigParams) build() map[string]interface{} {
 		"static_resources": map[string]interface{}{
 			"clusters": []interface{}{
 				map[string]interface{}{
-					"name":            keyXDSCluster,
+					"name":            valueXDSCluster,
 					"type":            "LOGICAL_DNS",
 					"connect_timeout": "5s",
 					"typed_extension_protocol_options": map[string]interface{}{
@@ -257,7 +257,7 @@ func (p *EnvoyConfigParams) build() map[string]interface{} {
 						},
 					},
 					"load_assignment": map[string]interface{}{
-						keyClusterName: keyXDSCluster,
+						keyClusterName: valueXDSCluster,
 						"endpoints": []interface{}{
 							map[string]interface{}{
 								"lb_endpoints": []interface{}{
