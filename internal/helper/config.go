@@ -31,6 +31,15 @@ const (
 	SPIFFEHelperHealthCheckReadinessPath  = "/ready"
 	SPIFFEHelperHealthCheckLivenessPath   = "/live"
 	SPIFFEHelperHealthCheckPort           = 8081
+
+	// Files written by spiffe-helper to the certs directory
+	SPIFFEHelperSVIDFileName       = "tls.crt"
+	SPIFFEHelperSVIDKeyFileName    = "tls.key"
+	SPIFFEHelperSVIDBundleFileName = "ca.pem"
+	SPIFFEHelperJWTBundleFileName  = "jwt_bundle.json"
+	// Trust bundles are public, so make the JWT bundle readable by application
+	// containers running as a different user to spiffe-helper (default 0600)
+	SPIFFEHelperJWTBundleFileMode = 0644
 )
 
 // Structs from github.com/spiffe/spiffe-helper/cmd/spiffe-helper/config
@@ -92,9 +101,11 @@ func NewSPIFFEHelper(params SPIFFEHelperConfigParams) (*SPIFFEHelper, error) {
 		IncludeFederatedDomains:  true,
 		AgentAddress:             params.AgentAddress,
 		AddIntermediatesToBundle: params.IncludeIntermediateBundle,
-		SVIDFilename:             "tls.crt",
-		SVIDKeyFilename:          "tls.key",
-		SVIDBundleFilename:       "ca.pem",
+		SVIDFilename:             SPIFFEHelperSVIDFileName,
+		SVIDKeyFilename:          SPIFFEHelperSVIDKeyFileName,
+		SVIDBundleFilename:       SPIFFEHelperSVIDBundleFileName,
+		JWTBundleFilename:        SPIFFEHelperJWTBundleFileName,
+		JWTBundleFileMode:        SPIFFEHelperJWTBundleFileMode,
 		HealthCheck: SPIFFEHelperHealthConfig{
 			ListenerEnabled: true,
 		},

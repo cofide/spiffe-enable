@@ -201,6 +201,11 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 					pod.Spec.Volumes = append(pod.Spec.Volumes, getCertsVolume())
 				}
 
+				// Mount the certs volume (read-only) to application containers, so they can load the SVID and bundles from disk
+				for i := range pod.Spec.Containers {
+					ensureVolumeMount(&pod.Spec.Containers[i], getCertsVolumeMount(), logger)
+				}
+
 				if !workload.InitContainerExists(pod, helper.SPIFFEHelperSidecarContainerName) {
 					logger.Info("Adding spiffe-helper sidecar container", "initContainerName", helper.SPIFFEHelperSidecarContainerName)
 					pod.Spec.InitContainers = append([]corev1.Container{spiffeHelper.GetSidecarContainer()}, pod.Spec.InitContainers...)
@@ -234,6 +239,14 @@ func getCertsVolume() corev1.Volume {
 	}
 }
 
+func getCertsVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{
+		Name:      constants.SPIFFEEnableCertVolumeName,
+		MountPath: constants.SPIFFEEnableCertDirectory,
+		ReadOnly:  true,
+	}
+}
+
 func getKeys(m map[string]bool) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -253,13 +266,13 @@ func ensureCSIVolumeAndMount(pod *corev1.Pod, logger logr.Logger) {
 	for i := range pod.Spec.Containers {
 		container := &pod.Spec.Containers[i]
 		// Add CSI volume mounts
-		ensureCSIVolumeMount(container, workload.GetSPIFFEVolumeMount(), logger)
+		ensureVolumeMount(container, workload.GetSPIFFEVolumeMount(), logger)
 		// Add SPIFFE socket environment variable
 		ensureEnvVar(container, workload.GetSPIFFEEnvVar())
 	}
 }
 
-func ensureCSIVolumeMount(container *corev1.Container, targetMount corev1.VolumeMount, logger logr.Logger) bool {
+func ensureVolumeMount(container *corev1.Container, targetMount corev1.VolumeMount, logger logr.Logger) bool {
 	madeChange := false
 	mountExists := false
 	mountIndex := -1 // Index of the mount if found by name and path
