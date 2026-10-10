@@ -33,6 +33,15 @@ func TestNewSPIFFEHelper(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "with group-readable key",
+			params: SPIFFEHelperConfigParams{
+				AgentAddress:       "/tmp/agent.sock",
+				CertPath:           "/mnt/certs",
+				KeyReadableByGroup: true,
+			},
+			expectError: false,
+		},
+		{
 			name: "empty params", // Check defaults or expected behavior for empty strings
 			params: SPIFFEHelperConfigParams{
 				AgentAddress: "",
@@ -79,6 +88,11 @@ func TestNewSPIFFEHelper(t *testing.T) {
 			assert.Equal(t, "ca.pem", decodedCfg.SVIDBundleFilename)
 			assert.Equal(t, "jwt_bundle.json", decodedCfg.JWTBundleFilename)
 			assert.Equal(t, 0644, decodedCfg.JWTBundleFileMode)
+			if tt.params.KeyReadableByGroup {
+				assert.Equal(t, 0640, decodedCfg.KeyFileMode)
+			} else {
+				assert.Zero(t, decodedCfg.KeyFileMode, "zero leaves spiffe-helper's default, 0600")
+			}
 
 			assert.True(t, decodedCfg.HealthCheck.ListenerEnabled)
 		})
