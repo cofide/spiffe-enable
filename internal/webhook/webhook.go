@@ -272,8 +272,7 @@ func ensureCSIVolumeAndMount(pod *corev1.Pod, logger logr.Logger) {
 	}
 }
 
-func ensureVolumeMount(container *corev1.Container, targetMount corev1.VolumeMount, logger logr.Logger) bool {
-	madeChange := false
+func ensureVolumeMount(container *corev1.Container, targetMount corev1.VolumeMount, logger logr.Logger) {
 	mountExists := false
 	mountIndex := -1 // Index of the mount if found by name and path
 
@@ -293,16 +292,13 @@ func ensureVolumeMount(container *corev1.Container, targetMount corev1.VolumeMou
 			logger.Info("Updating ReadOnly status for existing VolumeMount",
 				"containerName", container.Name, "volumeMountName", targetMount.Name, "newReadOnly", targetMount.ReadOnly)
 			container.VolumeMounts[mountIndex].ReadOnly = targetMount.ReadOnly
-			madeChange = true
 		} else {
 			// Mount does not exist at all, append it
 			logger.Info("Adding new VolumeMount to container",
 				"containerName", container.Name, "volumeMountName", targetMount.Name)
 			container.VolumeMounts = append(container.VolumeMounts, targetMount)
-			madeChange = true
 		}
 	}
-	return madeChange
 }
 
 func ensureEnvVar(container *corev1.Container, envVar corev1.EnvVar) {
