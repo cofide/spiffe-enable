@@ -23,6 +23,15 @@ The modes that are currently available:
 | `helper`  | A `spiffe-helper` sidecar container will be injected to retrieve and automatically renew the SVID and bundle (`csi` mode is implicitly enabled). |
 | `proxy`   | An Envoy sidecar container will be injected (`csi` mode is implicitly enabled). Note: this mode requires [Cofide's Connect Agent](#production-use-cases) |
 
+In `helper` mode, spiffe-helper writes the following files to `/spiffe-enable`, which is mounted read-only to all application containers and kept up to date as the SVID and bundles rotate:
+
+| File | Contents |
+| ---- | :--- |
+| `tls.crt` | X.509-SVID certificate (chain) |
+| `tls.key` | X.509-SVID private key (mode `0600`, owned by the spiffe-helper user) |
+| `ca.pem` | X.509 bundle for the SVID's trust domain, followed by any federated trust domains' bundles |
+| `jwt_bundle.json` | JWT bundles, as a JSON object of trust domain name to base64-encoded JWKS |
+
 When using the `proxy` component, the log level for the Envoy sidecar can be configured using the `spiffe.cofide.io/envoy-log-level` annotation.
 
 ### Debug UI

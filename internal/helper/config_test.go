@@ -77,6 +77,8 @@ func TestNewSPIFFEHelper(t *testing.T) {
 			assert.Equal(t, "tls.crt", decodedCfg.SVIDFilename)
 			assert.Equal(t, "tls.key", decodedCfg.SVIDKeyFilename)
 			assert.Equal(t, "ca.pem", decodedCfg.SVIDBundleFilename)
+			assert.Equal(t, "jwt_bundle.json", decodedCfg.JWTBundleFilename)
+			assert.Equal(t, 0644, decodedCfg.JWTBundleFileMode)
 
 			assert.True(t, decodedCfg.HealthCheck.ListenerEnabled)
 		})
