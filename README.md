@@ -28,9 +28,11 @@ In `helper` mode, spiffe-helper writes the following files to `/spiffe-enable`, 
 | File | Contents |
 | ---- | :--- |
 | `tls.crt` | X.509-SVID certificate (chain) |
-| `tls.key` | X.509-SVID private key (mode `0600`, owned by the spiffe-helper user) |
+| `tls.key` | X.509-SVID private key: mode `0600`, owned by the spiffe-helper user; or, if the pod sets `securityContext.fsGroup`, mode `0640` and readable by that group |
 | `ca.pem` | X.509 bundle for the SVID's trust domain, followed by any federated trust domains' bundles |
 | `jwt_bundle.json` | JWT bundles, as a JSON object of trust domain name to base64-encoded JWKS |
+
+spiffe-helper runs as root, so an application container running as another user can read the private key only through the pod's `fsGroup`: set `spec.securityContext.fsGroup` (e.g. to the application's group) and the certs volume, and the key, belong to that group.
 
 When using the `proxy` component, the log level for the Envoy sidecar can be configured using the `spiffe.cofide.io/envoy-log-level` annotation.
 
