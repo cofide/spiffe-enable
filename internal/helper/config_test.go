@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testCertPath = "/mnt/certs"
+
 func TestNewSPIFFEHelper(t *testing.T) {
 	tests := []struct {
 		name                      string
@@ -19,7 +21,7 @@ func TestNewSPIFFEHelper(t *testing.T) {
 			name: "default params",
 			params: SPIFFEHelperConfigParams{
 				AgentAddress: "/tmp/agent.sock",
-				CertPath:     "/mnt/certs",
+				CertPath:     testCertPath,
 			},
 			expectError: false,
 		},
@@ -27,7 +29,7 @@ func TestNewSPIFFEHelper(t *testing.T) {
 			name: "with inc intermediate bundle",
 			params: SPIFFEHelperConfigParams{
 				AgentAddress:              "unix:///tmp/spire-agent/public/api.sock",
-				CertPath:                  "/mnt/certs",
+				CertPath:                  testCertPath,
 				IncludeIntermediateBundle: true,
 			},
 			expectError: false,
@@ -36,7 +38,7 @@ func TestNewSPIFFEHelper(t *testing.T) {
 			name: "with group-readable key",
 			params: SPIFFEHelperConfigParams{
 				AgentAddress:       "/tmp/agent.sock",
-				CertPath:           "/mnt/certs",
+				CertPath:           testCertPath,
 				KeyReadableByGroup: true,
 			},
 			expectError: false,
