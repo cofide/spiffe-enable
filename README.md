@@ -28,11 +28,14 @@ In `helper` mode, spiffe-helper writes the following files to `/spiffe-enable`, 
 | File | Contents |
 | ---- | :--- |
 | `tls.crt` | X.509-SVID certificate (chain) |
-| `tls.key` | X.509-SVID private key: mode `0600`, owned by the spiffe-helper user; or, if the pod sets `securityContext.fsGroup`, mode `0640` and readable by that group |
+| `tls.key` | X.509-SVID private key: mode `0600`, or `0640` if the pod sets an `fsGroup` (see below) |
 | `ca.pem` | X.509 bundle for the SVID's trust domain, followed by any federated trust domains' bundles |
 | `jwt_bundle.json` | JWT bundles, as a JSON object of trust domain name to base64-encoded JWKS |
 
-spiffe-helper runs as root, so an application container running as another user can read the private key only through the pod's `fsGroup`: set `spec.securityContext.fsGroup` (e.g. to the application's group) and the certs volume, and the key, belong to that group.
+spiffe-helper runs as root by default, so the private key belongs to root. An application container running as another user can read it in one of two ways:
+
+- Set `spec.securityContext.runAsUser` on the pod, so spiffe-helper runs as the same user as the application and owns the key.
+- Set `spec.securityContext.fsGroup` (e.g. to the application's group). The certs volume, and the key, then belong to that group, and the key is group-readable. Every container in the pod runs with the `fsGroup`, so any container that mounts the certs volume can read the key.
 
 An application container that already mounts another volume at `/spiffe-enable` is left without the certs volume.
 

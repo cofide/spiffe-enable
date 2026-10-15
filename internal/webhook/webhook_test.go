@@ -375,7 +375,7 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			},
 		},
 		// TODO: Add tests for idempotency of helper and proxy components if they already exist.
-		// TODO: Add test for existing CSI volume mount with different ReadOnly (should be updated by ensureVolumeMount)
+		// TODO: Add tests for existing CSI and certs volume mounts with different ReadOnly (should be updated by ensureVolumeMount)
 	}
 
 	for _, tt := range tests {
