@@ -291,6 +291,13 @@ func ensureVolumeMount(container *corev1.Container, targetMount corev1.VolumeMou
 	mountIndex := -1 // Index of the mount if found by name and path
 
 	for i, vm := range container.VolumeMounts {
+		if vm.Name != targetMount.Name && vm.MountPath == targetMount.MountPath {
+			// Another volume is mounted at the path, and a second mount there would fail pod validation
+			logger.Info("Skipping VolumeMount, as another volume is mounted at its path",
+				"containerName", container.Name, "volumeMountName", targetMount.Name,
+				"mountPath", targetMount.MountPath, "existingVolumeMountName", vm.Name)
+			return
+		}
 		if vm.Name == targetMount.Name && vm.MountPath == targetMount.MountPath {
 			mountIndex = i
 			if vm.ReadOnly == targetMount.ReadOnly {

@@ -34,6 +34,8 @@ In `helper` mode, spiffe-helper writes the following files to `/spiffe-enable`, 
 
 spiffe-helper runs as root, so an application container running as another user can read the private key only through the pod's `fsGroup`: set `spec.securityContext.fsGroup` (e.g. to the application's group) and the certs volume, and the key, belong to that group.
 
+An application container that already mounts another volume at `/spiffe-enable` is left without the certs volume.
+
 When using the `proxy` component, the log level for the Envoy sidecar can be configured using the `spiffe.cofide.io/envoy-log-level` annotation.
 
 ### Debug UI
