@@ -223,6 +223,22 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			},
 		},
 		{
+			name:            "spiffe.cofide.io/inject: helper,proxy",
+			podAnnotations:  map[string]string{constants.InjectAnnotation: "helper,proxy"},
+			initialPod:      basePod,
+			expectedAllowed: true,
+			expectedPatched: true,
+			validatePod:     validateCertsMountedToAppOnly,
+		},
+		{
+			name:            "spiffe.cofide.io/inject: proxy,helper",
+			podAnnotations:  map[string]string{constants.InjectAnnotation: "proxy,helper"},
+			initialPod:      basePod,
+			expectedAllowed: true,
+			expectedPatched: true,
+			validatePod:     validateCertsMountedToAppOnly,
+		},
+		{
 			name:            "spiffe.cofide.io/inject: proxy",
 			podAnnotations:  map[string]string{constants.InjectAnnotation: constants.InjectAnnotationProxy},
 			initialPod:      basePod,
@@ -412,6 +428,28 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			}
 		})
 	}
+}
+
+// validateCertsMountedToAppOnly checks that the app container, but not the
+// Envoy sidecar, mounts the certs volume.
+func validateCertsMountedToAppOnly(t *testing.T, mutatedPod *corev1.Pod) {
+	t.Helper()
+	certsMount := corev1.VolumeMount{
+		Name:      constants.SPIFFEEnableCertVolumeName,
+		MountPath: constants.SPIFFEEnableCertDirectory,
+		ReadOnly:  true,
+	}
+	var foundEnvoy bool
+	for _, c := range mutatedPod.Spec.Containers {
+		switch c.Name {
+		case "app-container":
+			assert.Contains(t, c.VolumeMounts, certsMount)
+		case proxy.EnvoySidecarContainerName:
+			foundEnvoy = true
+			assert.NotContains(t, c.VolumeMounts, certsMount)
+		}
+	}
+	assert.True(t, foundEnvoy, "Envoy sidecar container not found")
 }
 
 // injectedHelperConfig decodes the spiffe-helper config the webhook passed to

@@ -208,6 +208,9 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 
 				// Mount the certs volume (read-only) to application containers, so they can load the SVID and bundles from disk
 				for i := range pod.Spec.Containers {
+					if isInjectedSidecar(pod.Spec.Containers[i].Name) {
+						continue
+					}
 					ensureVolumeMount(&pod.Spec.Containers[i], getCertsVolumeMount(), logger)
 				}
 
@@ -250,6 +253,12 @@ func getCertsVolumeMount() corev1.VolumeMount {
 		MountPath: constants.SPIFFEEnableCertDirectory,
 		ReadOnly:  true,
 	}
+}
+
+// isInjectedSidecar reports whether a container is one this webhook injects,
+// rather than one of the pod's application containers.
+func isInjectedSidecar(name string) bool {
+	return name == constants.DebugUIContainerName || name == proxy.EnvoySidecarContainerName
 }
 
 func getKeys(m map[string]bool) []string {
