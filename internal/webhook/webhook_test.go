@@ -16,6 +16,7 @@ import (
 	"github.com/cofide/spiffe-enable/internal/proxy"
 	"github.com/cofide/spiffe-enable/internal/workload"
 	"github.com/go-logr/logr/testr"
+	"github.com/hashicorp/hcl/v2/hclsimple"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -200,6 +201,25 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 
 				assert.Len(t, mutatedPod.Spec.Containers, 1)     // app
 				assert.Len(t, mutatedPod.Spec.InitContainers, 2) // init + helper
+
+				// Without an fsGroup, the key keeps spiffe-helper's default mode, 0600.
+				assert.Zero(t, injectedHelperConfig(t, mutatedPod).KeyFileMode)
+			},
+		},
+		{
+			name:           "spiffe.cofide.io/inject: helper, pod with fsGroup",
+			podAnnotations: map[string]string{constants.InjectAnnotation: constants.InjectAnnotationHelper},
+			initialPod: func() *corev1.Pod {
+				pod := basePod()
+				pod.Spec.SecurityContext = &corev1.PodSecurityContext{FSGroup: ptr.To(int64(65532))}
+				return pod
+			},
+			expectedAllowed: true,
+			expectedPatched: true,
+			validatePod: func(t *testing.T, mutatedPod *corev1.Pod) {
+				// The fsGroup owns the certs volume, so a group-readable key is
+				// readable by the app container.
+				assert.Equal(t, 0640, injectedHelperConfig(t, mutatedPod).KeyFileMode)
 			},
 		},
 		{
@@ -392,4 +412,24 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			}
 		})
 	}
+}
+
+// injectedHelperConfig decodes the spiffe-helper config the webhook passed to
+// its init container.
+func injectedHelperConfig(t *testing.T, pod *corev1.Pod) helper.SPIFFEHelperConfig {
+	t.Helper()
+	for _, ic := range pod.Spec.InitContainers {
+		if ic.Name != helper.SPIFFEHelperInitContainerName {
+			continue
+		}
+		for _, env := range ic.Env {
+			if env.Name == helper.SPIFFEHelperConfigContentEnvVar {
+				var cfg helper.SPIFFEHelperConfig
+				require.NoError(t, hclsimple.Decode("config.hcl", []byte(env.Value), nil, &cfg))
+				return cfg
+			}
+		}
+	}
+	t.Fatal("spiffe-helper config not found in the init container")
+	return helper.SPIFFEHelperConfig{}
 }

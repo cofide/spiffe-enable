@@ -40,6 +40,11 @@ const (
 	// Trust bundles are public, so make the JWT bundle readable by application
 	// containers running as a different user to spiffe-helper (default 0600)
 	SPIFFEHelperJWTBundleFileMode = 0644
+	// The SVID private key is readable only by spiffe-helper's user (0600, the
+	// spiffe-helper default) unless the pod sets an fsGroup. Then the key is
+	// group-readable (0640): the certs volume, and so the key, belongs to the
+	// fsGroup, which application containers run with as a supplementary group.
+	SPIFFEHelperKeyFileModeGroupReadable = 0640
 )
 
 // Structs from github.com/spiffe/spiffe-helper/cmd/spiffe-helper/config
@@ -88,6 +93,9 @@ type SPIFFEHelperConfigParams struct {
 	AgentAddress              string
 	CertPath                  string
 	IncludeIntermediateBundle bool
+	// KeyReadableByGroup makes the SVID private key group-readable, for pods
+	// whose fsGroup lets application containers read it.
+	KeyReadableByGroup bool
 }
 
 func NewSPIFFEHelper(params SPIFFEHelperConfigParams) (*SPIFFEHelper, error) {
@@ -109,6 +117,10 @@ func NewSPIFFEHelper(params SPIFFEHelperConfigParams) (*SPIFFEHelper, error) {
 		HealthCheck: SPIFFEHelperHealthConfig{
 			ListenerEnabled: true,
 		},
+	}
+	// Zero leaves spiffe-helper's default, 0600.
+	if params.KeyReadableByGroup {
+		spiffeHelperCfg.KeyFileMode = SPIFFEHelperKeyFileModeGroupReadable
 	}
 
 	// Marshal to an HCL-formatted string
