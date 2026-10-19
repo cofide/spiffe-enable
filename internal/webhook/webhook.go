@@ -208,6 +208,9 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 
 				// Mount the certs volume (read-only) to application containers, so they can load the SVID and bundles from disk
 				for i := range pod.Spec.Containers {
+					if isInjectedSidecar(pod.Spec.Containers[i].Name) {
+						continue
+					}
 					ensureVolumeMount(&pod.Spec.Containers[i], getCertsVolumeMount(), logger)
 				}
 
@@ -252,6 +255,12 @@ func getCertsVolumeMount() corev1.VolumeMount {
 	}
 }
 
+// isInjectedSidecar reports whether a container is one this webhook injects,
+// rather than one of the pod's application containers.
+func isInjectedSidecar(name string) bool {
+	return name == constants.DebugUIContainerName || name == proxy.EnvoySidecarContainerName
+}
+
 func getKeys(m map[string]bool) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -282,6 +291,13 @@ func ensureVolumeMount(container *corev1.Container, targetMount corev1.VolumeMou
 	mountIndex := -1 // Index of the mount if found by name and path
 
 	for i, vm := range container.VolumeMounts {
+		if vm.Name != targetMount.Name && vm.MountPath == targetMount.MountPath {
+			// Another volume is mounted at the path, and a second mount there would fail pod validation
+			logger.Info("Skipping VolumeMount, as another volume is mounted at its path",
+				"containerName", container.Name, "volumeMountName", targetMount.Name,
+				"mountPath", targetMount.MountPath, "existingVolumeMountName", vm.Name)
+			return
+		}
 		if vm.Name == targetMount.Name && vm.MountPath == targetMount.MountPath {
 			mountIndex = i
 			if vm.ReadOnly == targetMount.ReadOnly {
