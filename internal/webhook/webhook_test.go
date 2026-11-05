@@ -191,6 +191,13 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 				}
 				assert.True(t, foundHelperSidecar, "SPIFFE Helper sidecar container not found")
 
+				// The app container can read the SVID and bundles written by the helper
+				assert.Contains(t, mutatedPod.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+					Name:      constants.SPIFFEEnableCertVolumeName,
+					MountPath: constants.SPIFFEEnableCertDirectory,
+					ReadOnly:  true,
+				})
+
 				assert.Len(t, mutatedPod.Spec.Containers, 1)     // app
 				assert.Len(t, mutatedPod.Spec.InitContainers, 2) // init + helper
 			},
@@ -315,7 +322,7 @@ func TestSpiffeEnableWebhook_Handle(t *testing.T) {
 			},
 		},
 		// TODO: Add tests for idempotency of helper and proxy components if they already exist.
-		// TODO: Add test for existing CSI volume mount with different ReadOnly (should be updated by ensureCSIVolumeMount)
+		// TODO: Add test for existing CSI volume mount with different ReadOnly (should be updated by ensureVolumeMount)
 	}
 
 	for _, tt := range tests {
