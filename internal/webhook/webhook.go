@@ -176,10 +176,15 @@ func (a *spiffeEnableWebhook) Handle(ctx context.Context, req admission.Request)
 				}
 
 				// Generate the spiffe-helper configuration
+				// With an fsGroup, the certs volume belongs to that group, and
+				// application containers can read a group-readable key.
+				keyReadableByGroup := pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.FSGroup != nil
+
 				configParams := helper.SPIFFEHelperConfigParams{
 					AgentAddress:              constants.SPIFFEWLSocketPath,
 					CertPath:                  constants.SPIFFEEnableCertDirectory,
 					IncludeIntermediateBundle: incIntermediateBundle,
+					KeyReadableByGroup:        keyReadableByGroup,
 				}
 
 				spiffeHelper, err := helper.NewSPIFFEHelper(configParams)
