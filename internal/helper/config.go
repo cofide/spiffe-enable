@@ -37,6 +37,9 @@ const (
 	SPIFFEHelperSVIDKeyFileName    = "tls.key"
 	SPIFFEHelperSVIDBundleFileName = "ca.pem"
 	SPIFFEHelperJWTBundleFileName  = "jwt_bundle.json"
+	// HCL has no octal literals, so file modes appear in decimal in the
+	// generated config: 0644 as 420, 0640 as 416.
+	//
 	// Trust bundles are public, so make the JWT bundle readable by application
 	// containers running as a different user to spiffe-helper (default 0600)
 	SPIFFEHelperJWTBundleFileMode = 0644
